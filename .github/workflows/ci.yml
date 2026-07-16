@@ -56,16 +56,16 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  full:
-    if: ${{ github.repository_owner == 'opus-domini' && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event.repository.private || github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
-    runs-on: ${{ github.event_name == 'pull_request' && (!github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["opus-domini-ci"]') }}
+  full-hosted:
+    if: ${{ github.repository_owner == 'opus-domini' && github.event_name == 'pull_request' && (!github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
+    runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    env:
+    env: &ci-env
       GOLANGCI_LINT_VERSION: ${{ inputs.golangci-lint-version }}
       GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
       NPM_VERSION: ${{ inputs.npm-version }}
       OPUS_CI_FRONTEND: ${{ inputs.frontend }}
-    steps:
+    steps: &ci-steps
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -119,3 +119,12 @@ jobs:
           token: ${{ secrets.codecov-token }}
           fail_ci_if_error: false
           version: v11.3.1
+
+  full-trusted:
+    if: ${{ github.repository_owner == 'opus-domini' && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event.repository.private || github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || (github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    runs-on:
+      group: opus-domini-ci
+      labels: opus-domini-ci
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    env: *ci-env
+    steps: *ci-steps

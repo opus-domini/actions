@@ -51,7 +51,9 @@ concurrency:
 jobs:
   release-gate:
     if: ${{ github.repository_owner == 'opus-domini' && github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-    runs-on: [opus-domini-release]
+    runs-on:
+      group: opus-domini-release
+      labels: opus-domini-release
     timeout-minutes: 30
     permissions:
       contents: read
@@ -87,7 +89,9 @@ jobs:
 
   release-please:
     needs: release-gate
-    runs-on: [opus-domini-release]
+    runs-on:
+      group: opus-domini-release
+      labels: opus-domini-release
     timeout-minutes: 10
     permissions:
       contents: write
@@ -108,7 +112,9 @@ jobs:
   goreleaser:
     needs: release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
-    runs-on: [opus-domini-release]
+    runs-on:
+      group: opus-domini-release
+      labels: opus-domini-release
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
       contents: write
