@@ -1,4 +1,4 @@
-name: Reusable release
+name: Reusable release publication
 
 on:
   workflow_call:
@@ -52,8 +52,14 @@ jobs:
   release-gate:
     if: >-
       ${{ github.repository_owner == 'opus-domini' &&
-          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
-          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+          github.event_name == 'pull_request' &&
+          github.event.action == 'closed' &&
+          github.event.pull_request.merged == true &&
+          github.event.pull_request.base.ref == github.event.repository.default_branch &&
+          github.event.pull_request.base.repo.full_name == github.repository &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          startsWith(github.event.pull_request.head.ref, format('release-please--branches--{0}', github.event.repository.default_branch)) &&
+          contains(github.event.pull_request.labels.*.name, 'autorelease: pending') }}
     runs-on:
       group: opus-domini-release
       labels: opus-domini-release
@@ -65,47 +71,41 @@ jobs:
       GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
       NPM_VERSION: ${{ inputs.npm-version }}
       OPUS_CI_FRONTEND: ${{ inputs.frontend }}
+    outputs:
+      tag_name: ${{ steps.release_check.outputs.tag_name }}
     steps:
-      - name: Checkout
+      - name: Checkout release commit
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 2
           fetch-tags: true
           persist-credentials: false
 
-      - name: Detect release commit
+      - name: Validate release commit
         id: release_check
         env:
+          RELEASE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
           RELEASE_PLEASE_MANIFEST: ${{ inputs.release-please-manifest }}
         shell: bash
         run: |
           set -euo pipefail
 
-          manifest_changed=false
+          checkout_sha="$(git rev-parse HEAD)"
+          if [[ "$checkout_sha" != "$RELEASE_SHA" ]]; then
+            echo "::error title=Invalid release checkout::Checked out ${checkout_sha}, expected ${RELEASE_SHA}."
+            exit 1
+          fi
+
           if ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            manifest_changed=true
-          elif git diff-tree --no-commit-id --name-only -r \
-            HEAD^ HEAD -- "$RELEASE_PLEASE_MANIFEST" \
-            | grep --fixed-strings --line-regexp --quiet \
-              -- "$RELEASE_PLEASE_MANIFEST"; then
-            manifest_changed=true
+            echo "::error title=Invalid release commit::The parent of the release commit is unavailable."
+            exit 1
           fi
 
-          required="$manifest_changed"
-          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
-            required=true
+          if git diff --quiet HEAD^ HEAD -- "$RELEASE_PLEASE_MANIFEST"; then
+            echo "::error title=Invalid release commit::The release manifest was not changed by this commit."
+            exit 1
           fi
-
-          echo "manifest_changed=$manifest_changed" >>"$GITHUB_OUTPUT"
-          echo "required=$required" >>"$GITHUB_OUTPUT"
-
-      - name: Validate release state
-        env:
-          MANIFEST_CHANGED: ${{ steps.release_check.outputs.manifest_changed }}
-          RELEASE_PLEASE_MANIFEST: ${{ inputs.release-please-manifest }}
-        shell: bash
-        run: |
-          set -euo pipefail
 
           manifest_version="$(jq -er '
             if type == "object"
@@ -115,34 +115,36 @@ jobs:
             else error("expected a single non-empty string version for package .")
             end
           ' "$RELEASE_PLEASE_MANIFEST")"
-          tag_ref="refs/tags/v${manifest_version}^{commit}"
+          tag_name="v${manifest_version}"
+          tag_ref="refs/tags/${tag_name}"
 
-          if [[ "$MANIFEST_CHANGED" != true ]] \
-            && ! git rev-parse --verify --quiet "$tag_ref" >/dev/null; then
-            echo "::error title=Inconsistent release state::The manifest points to ${manifest_version}, but tag v${manifest_version} does not exist and this commit did not change the manifest."
-            exit 1
+          if git show-ref --verify --quiet "$tag_ref"; then
+            tag_commit="$(git rev-parse "${tag_ref}^{commit}")"
+            if [[ "$tag_commit" != "$RELEASE_SHA" ]]; then
+              echo "::error title=Invalid release tag::${tag_name} already points to ${tag_commit}, not ${RELEASE_SHA}."
+              exit 1
+            fi
           fi
 
+          echo "tag_name=$tag_name" >>"$GITHUB_OUTPUT"
+
       - name: Set up Go
-        if: ${{ steps.release_check.outputs.required == 'true' }}
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
 
       - name: Set up Node
-        if: ${{ inputs.frontend && steps.release_check.outputs.required == 'true' }}
+        if: ${{ inputs.frontend }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ inputs.node-version }}
           package-manager-cache: false
 
       - name: Bootstrap tools
-        if: ${{ steps.release_check.outputs.required == 'true' }}
         run: opus-ci bootstrap full
 
       - name: Full CI before release
-        if: ${{ steps.release_check.outputs.required == 'true' }}
         run: make ci-full
 
   release-please:
@@ -155,21 +157,66 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - name: Run Release Please
+      - name: Create GitHub release
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ github.token }}
           config-file: ${{ inputs.release-please-config }}
           manifest-file: ${{ inputs.release-please-manifest }}
+          target-branch: ${{ github.event.repository.default_branch }}
+          skip-github-pull-request: true
+
+      - name: Validate Release Please output
+        env:
+          ACTION_RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
+          ACTION_TAG_NAME: ${{ steps.release.outputs.tag_name }}
+          EXPECTED_TAG_NAME: ${{ needs.release-gate.outputs.tag_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$ACTION_RELEASE_CREATED" == true ]] \
+            && [[ "$ACTION_TAG_NAME" != "$EXPECTED_TAG_NAME" ]]; then
+            echo "::error title=Unexpected release tag::Release Please created ${ACTION_TAG_NAME}, expected ${EXPECTED_TAG_NAME}."
+            exit 1
+          fi
+
+      - name: Checkout release tag
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.release-gate.outputs.tag_name }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate release target
+        env:
+          EXPECTED_TAG_NAME: ${{ needs.release-gate.outputs.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag_commit="$(git rev-parse HEAD)"
+          if [[ "$tag_commit" != "$RELEASE_SHA" ]]; then
+            echo "::error title=Invalid release target::${EXPECTED_TAG_NAME} points to ${tag_commit}, not ${RELEASE_SHA}."
+            exit 1
+          fi
+
+          release_tag="$(gh api \
+            "repos/$GITHUB_REPOSITORY/releases/tags/$EXPECTED_TAG_NAME" \
+            --jq .tag_name)"
+          if [[ "$release_tag" != "$EXPECTED_TAG_NAME" ]]; then
+            echo "::error title=Invalid GitHub release::Found ${release_tag}, expected ${EXPECTED_TAG_NAME}."
+            exit 1
+          fi
 
   goreleaser:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    needs:
+      - release-gate
+      - release-please
     runs-on:
       group: opus-domini-release
       labels: opus-domini-release
@@ -188,7 +235,7 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ needs.release-gate.outputs.tag_name }}
           fetch-depth: 0
           persist-credentials: false
 

@@ -45,30 +45,74 @@ jobs:
         run: |
           set -euo pipefail
 
-          workflow=.github/workflows/release.yml
-          required_expressions=(
-            "github.event_name == 'workflow_dispatch'"
+          release_pr_workflow=.github/workflows/release-pr.yml
+          publish_workflow=.github/workflows/release.yml
+
+          release_pr_expressions=(
             "github.event_name == 'push'"
             'fetch-depth: 2'
-            'fetch-tags: true'
-            'git diff-tree --no-commit-id --name-only -r'
-            'RELEASE_PLEASE_MANIFEST:'
-            'release-please-manifest'
+            "git diff --quiet HEAD^ HEAD -- \"\$RELEASE_PLEASE_MANIFEST\""
             'manifest_changed'
-            'keys == ["."]'
-            "refs/tags/v\${manifest_version}^{commit}"
-            "[[ \"\$MANIFEST_CHANGED\" != true ]]"
-            'needs: release-gate'
-            "steps.release_check.outputs.required == 'true'"
-            "needs.release-please.outputs.release_created == 'true'"
+            "needs.classify.outputs.manifest_changed == 'false'"
+            'skip-github-release: true'
           )
 
-          for expression in "${required_expressions[@]}"; do
-            grep --fixed-strings --quiet "$expression" "$workflow"
+          for expression in "${release_pr_expressions[@]}"; do
+            grep --fixed-strings --quiet "$expression" "$release_pr_workflow"
           done
 
-          test "$(grep --fixed-strings --count 'run: make ci-full' "$workflow")" -eq 2
           test "$(grep --fixed-strings --count \
-            "steps.release_check.outputs.required == 'true'" "$workflow")" -eq 4
-          test "$(grep --fixed-strings --count 'fetch-tags: true' "$workflow")" -eq 1
-          ! grep --fixed-strings --quiet 'github.event.head_commit.message' "$workflow"
+            'googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7' \
+            "$release_pr_workflow")" -eq 1
+          if grep --fixed-strings --quiet 'skip-github-pull-request:' "$release_pr_workflow"; then
+            exit 1
+          fi
+          if grep --fixed-strings --quiet "github.event_name == 'workflow_dispatch'" "$release_pr_workflow"; then
+            exit 1
+          fi
+
+          publish_expressions=(
+            "github.event_name == 'pull_request'"
+            "github.event.action == 'closed'"
+            'github.event.pull_request.merged == true'
+            'github.event.pull_request.base.ref == github.event.repository.default_branch'
+            'github.event.pull_request.base.repo.full_name == github.repository'
+            'github.event.pull_request.head.repo.full_name == github.repository'
+            "startsWith(github.event.pull_request.head.ref, format('release-please--branches--{0}', github.event.repository.default_branch))"
+            "contains(github.event.pull_request.labels.*.name, 'autorelease: pending')"
+            "ref: \${{ github.event.pull_request.merge_commit_sha }}"
+            "RELEASE_SHA: \${{ github.event.pull_request.merge_commit_sha }}"
+            "git diff --quiet HEAD^ HEAD -- \"\$RELEASE_PLEASE_MANIFEST\""
+            'keys == ["."]'
+            "tag_name=\"v\${manifest_version}\""
+            'needs: release-gate'
+            'skip-github-pull-request: true'
+            "repos/\$GITHUB_REPOSITORY/releases/tags/\$EXPECTED_TAG_NAME"
+          )
+
+          for expression in "${publish_expressions[@]}"; do
+            grep --fixed-strings --quiet "$expression" "$publish_workflow"
+          done
+
+          test "$(grep --fixed-strings --count 'run: make ci-full' "$publish_workflow")" -eq 2
+          test "$(grep --fixed-strings --count 'fetch-tags: true' "$publish_workflow")" -eq 1
+          test "$(grep --fixed-strings --count \
+            'googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7' \
+            "$publish_workflow")" -eq 1
+          if grep --fixed-strings --quiet 'skip-github-release:' "$publish_workflow"; then
+            exit 1
+          fi
+          if grep --fixed-strings --quiet "github.event_name == 'push'" "$publish_workflow"; then
+            exit 1
+          fi
+          if grep --fixed-strings --quiet "github.event_name == 'workflow_dispatch'" "$publish_workflow"; then
+            exit 1
+          fi
+
+          for workflow in .github/workflows/*.yml; do
+            if grep --extended-regexp --quiet \
+              '^[[:space:]]*uses:[[:space:]]+[^@]+@(main|master|v[0-9])' \
+              "$workflow"; then
+              exit 1
+            fi
+          done
