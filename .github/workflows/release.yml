@@ -70,6 +70,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 2
+          fetch-tags: true
           persist-credentials: false
 
       - name: Detect release commit
@@ -80,19 +81,47 @@ jobs:
         run: |
           set -euo pipefail
 
-          required=false
-          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
-            required=true
-          elif ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            required=true
+          manifest_changed=false
+          if ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            manifest_changed=true
           elif git diff-tree --no-commit-id --name-only -r \
             HEAD^ HEAD -- "$RELEASE_PLEASE_MANIFEST" \
             | grep --fixed-strings --line-regexp --quiet \
               -- "$RELEASE_PLEASE_MANIFEST"; then
+            manifest_changed=true
+          fi
+
+          required="$manifest_changed"
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
             required=true
           fi
 
+          echo "manifest_changed=$manifest_changed" >>"$GITHUB_OUTPUT"
           echo "required=$required" >>"$GITHUB_OUTPUT"
+
+      - name: Validate release state
+        env:
+          MANIFEST_CHANGED: ${{ steps.release_check.outputs.manifest_changed }}
+          RELEASE_PLEASE_MANIFEST: ${{ inputs.release-please-manifest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          manifest_version="$(jq -er '
+            if type == "object"
+              and keys == ["."]
+              and (.["."] | type == "string" and length > 0)
+            then .["."]
+            else error("expected a single non-empty string version for package .")
+            end
+          ' "$RELEASE_PLEASE_MANIFEST")"
+          tag_ref="refs/tags/v${manifest_version}^{commit}"
+
+          if [[ "$MANIFEST_CHANGED" != true ]] \
+            && ! git rev-parse --verify --quiet "$tag_ref" >/dev/null; then
+            echo "::error title=Inconsistent release state::The manifest points to ${manifest_version}, but tag v${manifest_version} does not exist and this commit did not change the manifest."
+            exit 1
+          fi
 
       - name: Set up Go
         if: ${{ steps.release_check.outputs.required == 'true' }}

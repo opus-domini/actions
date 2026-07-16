@@ -50,9 +50,14 @@ jobs:
             "github.event_name == 'workflow_dispatch'"
             "github.event_name == 'push'"
             'fetch-depth: 2'
+            'fetch-tags: true'
             'git diff-tree --no-commit-id --name-only -r'
             'RELEASE_PLEASE_MANIFEST:'
             'release-please-manifest'
+            'manifest_changed'
+            'keys == ["."]'
+            "refs/tags/v\${manifest_version}^{commit}"
+            "[[ \"\$MANIFEST_CHANGED\" != true ]]"
             'needs: release-gate'
             "steps.release_check.outputs.required == 'true'"
             "needs.release-please.outputs.release_created == 'true'"
@@ -65,4 +70,5 @@ jobs:
           test "$(grep --fixed-strings --count 'run: make ci-full' "$workflow")" -eq 2
           test "$(grep --fixed-strings --count \
             "steps.release_check.outputs.required == 'true'" "$workflow")" -eq 4
+          test "$(grep --fixed-strings --count 'fetch-tags: true' "$workflow")" -eq 1
           ! grep --fixed-strings --quiet 'github.event.head_commit.message' "$workflow"
