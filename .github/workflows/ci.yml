@@ -1,0 +1,121 @@
+name: Reusable CI
+
+on:
+  workflow_call:
+    inputs:
+      frontend:
+        description: Set up Node and npm for repositories with a frontend
+        required: false
+        type: boolean
+        default: false
+      frontend-lockfile:
+        description: Frontend lockfile
+        required: false
+        type: string
+        default: frontend/package-lock.json
+      golangci-lint-version:
+        description: golangci-lint version used by the repository Make targets
+        required: false
+        type: string
+        default: v2.12.2
+      govulncheck-version:
+        description: govulncheck version used by the repository Make targets
+        required: false
+        type: string
+        default: v1.6.0
+      node-version:
+        description: Node major or exact version for frontend repositories
+        required: false
+        type: string
+        default: "26"
+      npm-version:
+        description: npm version for frontend repositories
+        required: false
+        type: string
+        default: 12.0.1
+      upload-codecov:
+        description: Upload coverage to Codecov
+        required: false
+        type: boolean
+        default: false
+      timeout-minutes:
+        description: Full CI job timeout
+        required: false
+        type: number
+        default: 30
+    secrets:
+      codecov-token:
+        description: Optional Codecov upload token
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.repository }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  full:
+    if: ${{ github.repository_owner == 'opus-domini' && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event.repository.private || github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
+    runs-on: ${{ github.event_name == 'pull_request' && (!github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["opus-domini-ci"]') }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    env:
+      GOLANGCI_LINT_VERSION: ${{ inputs.golangci-lint-version }}
+      GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
+      NPM_VERSION: ${{ inputs.npm-version }}
+      OPUS_CI_FRONTEND: ${{ inputs.frontend }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: ${{ github.event_name == 'pull_request' && (!github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
+
+      - name: Set up Node
+        if: ${{ inputs.frontend }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          package-manager-cache: false
+          cache: ${{ github.event_name == 'pull_request' && (!github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) && 'npm' || '' }}
+          cache-dependency-path: ${{ inputs.frontend-lockfile }}
+
+      - name: Bootstrap tools
+        if: ${{ github.event_name != 'pull_request' || (github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: opus-ci bootstrap full
+
+      - name: Bootstrap hosted tools
+        if: ${{ github.event_name == 'pull_request' && (!github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_dir="$RUNNER_TEMP/tools"
+          mkdir -p "$tool_dir"
+          GOBIN="$tool_dir" go install \
+            "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$GOLANGCI_LINT_VERSION"
+          GOBIN="$tool_dir" go install \
+            "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
+          echo "$tool_dir" >>"$GITHUB_PATH"
+          echo "GOLANGCI_LINT_CACHE=$RUNNER_TEMP/golangci-lint-cache" >>"$GITHUB_ENV"
+          if [[ "$OPUS_CI_FRONTEND" == true ]]; then
+            npm_prefix="$RUNNER_TEMP/npm"
+            npm install --global --prefix "$npm_prefix" "npm@$NPM_VERSION"
+            echo "$npm_prefix/bin" >>"$GITHUB_PATH"
+          fi
+
+      - name: Full CI
+        run: make ci-full
+
+      - name: Upload coverage to Codecov
+        if: ${{ inputs.upload-codecov }}
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          token: ${{ secrets.codecov-token }}
+          fail_ci_if_error: false
+          version: v11.3.1

@@ -1,0 +1,41 @@
+name: Validate workflows
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.26.5
+          cache: false
+
+      - name: Install actionlint
+        run: |
+          install -d "$RUNNER_TEMP/bin"
+          GOBIN="$RUNNER_TEMP/bin" go install \
+            github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+
+      - name: Validate
+        run: actionlint
