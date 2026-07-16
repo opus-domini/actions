@@ -1,6 +1,6 @@
 self-hosted-runner:
   labels:
-    - opus-domini-ci
-    - opus-domini-release
+    - runner-platform-ci
+    - runner-platform-release
 
 config-variables: null

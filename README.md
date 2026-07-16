@@ -1,3 +1,3 @@
 # Opus Domini Actions
 
-Reusable workflows for Opus Domini repositories.
+Reusable GitHub Actions workflows.

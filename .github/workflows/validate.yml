@@ -40,6 +40,187 @@ jobs:
       - name: Validate
         run: actionlint
 
+      - name: Validate runner routing contract
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          workflows=(
+            .github/workflows/ci.yml
+            .github/workflows/vulnerability-scan.yml
+            .github/workflows/release-pr.yml
+            .github/workflows/release.yml
+            .github/workflows/runner-smoke.yml
+          )
+
+          if grep --fixed-strings --quiet \
+            'github.repository_owner' "${workflows[@]}"; then
+            exit 1
+          fi
+          if grep --extended-regexp --quiet \
+            "github\.repository[[:space:]]*(==|!=)[[:space:]]*'[^']+'" \
+            "${workflows[@]}"; then
+            exit 1
+          fi
+          if grep --extended-regexp --quiet \
+            'RUNNER_NAME|hostname|[0-9]{1,3}(\.[0-9]{1,3}){3}|/(home|var|etc|opt|srv|run|tmp)/' \
+            README.md "${workflows[@]}"; then
+            exit 1
+          fi
+
+          ci_workflow=.github/workflows/ci.yml
+          ci_expressions=(
+            'hosted-pull-requests:'
+            'description: Route every pull request to a GitHub-hosted runner'
+            "github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository)"
+            "runs-on: ubuntu-latest"
+            "github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'"
+            "github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+            "github.event_name != 'pull_request' || github.event.pull_request.base.ref == github.event.repository.default_branch"
+            "github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)"
+            "runs-on: runner-platform-ci"
+          )
+          for expression in "${ci_expressions[@]}"; do
+            grep --fixed-strings --quiet "$expression" "$ci_workflow"
+          done
+
+          hosted_pull_request_expression="github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository)"
+          test "$(grep --fixed-strings --count "$hosted_pull_request_expression" "$ci_workflow")" -eq 4
+          grep --fixed-strings --quiet \
+            "github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)" \
+            "$ci_workflow"
+          test "$(grep --fixed-strings --count 'inputs.hosted-pull-requests' "$ci_workflow")" -eq 6
+
+          vulnerability_workflow=.github/workflows/vulnerability-scan.yml
+          grep --fixed-strings --quiet \
+            "(github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)" \
+            "$vulnerability_workflow"
+
+          ci_selector_count="$(awk \
+            'index($0, "runs-on: runner-platform-ci") { count++ } END { print count + 0 }' \
+            "${workflows[@]}")"
+          release_selector_count="$(awk \
+            'index($0, "runs-on: runner-platform-release") { count++ } END { print count + 0 }' \
+            "${workflows[@]}")"
+          test "$ci_selector_count" -eq 3
+          test "$release_selector_count" -eq 6
+
+          grep --fixed-strings --quiet '    - runner-platform-ci' .github/actionlint.yaml
+          grep --fixed-strings --quiet '    - runner-platform-release' .github/actionlint.yaml
+          if grep --extended-regexp --quiet \
+            '^[[:space:]]{6}(group|labels):' \
+            "${workflows[@]}"; then
+            exit 1
+          fi
+
+          smoke_workflow=.github/workflows/runner-smoke.yml
+          smoke_expressions=(
+            'permissions: {}'
+            'run-name: Runner smoke ['
+            "github.event_name == 'workflow_dispatch'"
+            "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+            'run: opus-ci bootstrap full'
+            'run: opus-ci bootstrap release'
+            "test \"\${OPUS_RUNNER_TRUST:-}\" = ci"
+            "test \"\${OPUS_RUNNER_TRUST:-}\" = release"
+          )
+          for expression in "${smoke_expressions[@]}"; do
+            grep --fixed-strings --quiet "$expression" "$smoke_workflow"
+          done
+          test "$(grep --fixed-strings --count 'inputs.install_id' "$smoke_workflow")" -eq 1
+
+          if grep --extended-regexp --quiet \
+            'actions/checkout|contents:[[:space:]]+write|id-token:|GITHUB_TOKEN|github\.token|run:[[:space:]]+make|/(home|var|run)/|RUNNER_NAME|hostname|docker\.sock' \
+            "$smoke_workflow"; then
+            exit 1
+          fi
+
+          route_ci() {
+            local event_name="$1"
+            local ref="$2"
+            local private_repository="$3"
+            local same_repository="$4"
+            local hosted_pull_requests="$5"
+            local default_base="$6"
+            local hosted=false
+            local persistent=false
+
+            if [[ "$event_name" == pull_request ]] \
+              && [[ "$hosted_pull_requests" == true \
+                || "$private_repository" == false \
+                || "$same_repository" == false ]]; then
+              hosted=true
+            fi
+
+            if [[ "$event_name" == push \
+              || "$event_name" == pull_request \
+                || "$event_name" == schedule \
+                || "$event_name" == workflow_dispatch ]] \
+              && [[ "$event_name" == pull_request || "$ref" == refs/heads/main ]] \
+              && [[ "$event_name" != pull_request || "$default_base" == true ]] \
+              && [[ "$event_name" != pull_request \
+                || ( "$hosted_pull_requests" == false \
+                  && "$private_repository" == true \
+                  && "$same_repository" == true ) ]]; then
+              persistent=true
+            fi
+
+            if [[ "$hosted" == true && "$persistent" == true ]]; then
+              return 1
+            elif [[ "$hosted" == true ]]; then
+              printf '%s\n' hosted
+            elif [[ "$persistent" == true ]]; then
+              printf '%s\n' persistent-ci
+            else
+              printf '%s\n' rejected
+            fi
+          }
+
+          route_release() {
+            local event_name="$1"
+            local action="$2"
+            local merged="$3"
+            local default_base="$4"
+            local same_base_repository="$5"
+            local same_head_repository="$6"
+            local release_branch="$7"
+            local pending_label="$8"
+
+            if [[ "$event_name" == pull_request \
+              && "$action" == closed \
+              && "$merged" == true \
+              && "$default_base" == true \
+              && "$same_base_repository" == true \
+              && "$same_head_repository" == true \
+              && "$release_branch" == true \
+              && "$pending_label" == true ]]; then
+              printf '%s\n' persistent-release
+            else
+              printf '%s\n' rejected
+            fi
+          }
+
+          test "$(route_ci push refs/heads/main true true true true)" = persistent-ci
+          test "$(route_ci pull_request refs/pull/1/merge true true true true)" = hosted
+          test "$(route_ci pull_request refs/pull/2/merge true false true true)" = hosted
+          test "$(route_ci pull_request refs/pull/3/merge true true false true)" = persistent-ci
+          test "$(route_ci pull_request refs/pull/4/merge false true false true)" = hosted
+          test "$(route_ci pull_request refs/pull/5/merge true true false false)" = rejected
+          test "$(route_ci schedule refs/heads/main true true true true)" = persistent-ci
+          test "$(route_ci workflow_dispatch refs/heads/main true true true true)" = persistent-ci
+          test "$(route_ci workflow_dispatch refs/heads/feature true true true true)" = rejected
+          test "$(route_ci push refs/heads/feature true true true true)" = rejected
+          test "$(route_release \
+            pull_request closed true true true true true true)" = persistent-release
+          test "$(route_release \
+            pull_request closed true true true false true true)" = rejected
+          test "$(route_release \
+            pull_request closed false true true true true true)" = rejected
+          test "$(route_release \
+            pull_request closed true true true true false true)" = rejected
+          test "$(route_release \
+            pull_request closed true true true true true false)" = rejected
+
       - name: Validate release orchestration contract
         shell: bash
         run: |
@@ -50,6 +231,7 @@ jobs:
 
           release_pr_expressions=(
             "github.event_name == 'push'"
+            "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
             'fetch-depth: 2'
             "git diff --quiet HEAD^ HEAD -- \"\$RELEASE_PLEASE_MANIFEST\""
             'manifest_changed'

@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: frontend/package-lock.json
+      hosted-pull-requests:
+        description: Route every pull request to a GitHub-hosted runner
+        required: false
+        type: boolean
+        default: false
       golangci-lint-version:
         description: golangci-lint version used by the repository Make targets
         required: false
@@ -57,7 +62,7 @@ concurrency:
 
 jobs:
   full-hosted:
-    if: ${{ github.repository_owner == 'opus-domini' && github.event_name == 'pull_request' && (!github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
+    if: ${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env: &ci-env
@@ -75,7 +80,7 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: ${{ github.event_name == 'pull_request' && (!github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
+          cache: ${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
 
       - name: Set up Node
         if: ${{ inputs.frontend }}
@@ -83,15 +88,15 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           package-manager-cache: false
-          cache: ${{ github.event_name == 'pull_request' && (!github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) && 'npm' || '' }}
+          cache: ${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) && 'npm' || '' }}
           cache-dependency-path: ${{ inputs.frontend-lockfile }}
 
       - name: Bootstrap tools
-        if: ${{ github.event_name != 'pull_request' || (github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: ${{ github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository) }}
         run: opus-ci bootstrap full
 
       - name: Bootstrap hosted tools
-        if: ${{ github.event_name == 'pull_request' && (!github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
+        if: ${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
         shell: bash
         run: |
           set -euo pipefail
@@ -121,10 +126,8 @@ jobs:
           version: v11.3.1
 
   full-trusted:
-    if: ${{ github.repository_owner == 'opus-domini' && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event.repository.private || github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || (github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)) }}
-    runs-on:
-      group: opus-domini-ci
-      labels: opus-domini-ci
+    if: ${{ (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || github.event.pull_request.base.ref == github.event.repository.default_branch) && (github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    runs-on: runner-platform-ci
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env: *ci-env
     steps: *ci-steps
