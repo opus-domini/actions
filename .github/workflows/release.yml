@@ -50,7 +50,10 @@ concurrency:
 
 jobs:
   release-gate:
-    if: ${{ github.repository_owner == 'opus-domini' && github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    if: >-
+      ${{ github.repository_owner == 'opus-domini' &&
+          github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     runs-on:
       group: opus-domini-release
       labels: opus-domini-release
@@ -66,25 +69,51 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          fetch-depth: 2
           persist-credentials: false
 
+      - name: Detect release commit
+        id: release_check
+        env:
+          RELEASE_PLEASE_MANIFEST: ${{ inputs.release-please-manifest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required=false
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            required=true
+          elif ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            required=true
+          elif git diff-tree --no-commit-id --name-only -r \
+            HEAD^ HEAD -- "$RELEASE_PLEASE_MANIFEST" \
+            | grep --fixed-strings --line-regexp --quiet \
+              -- "$RELEASE_PLEASE_MANIFEST"; then
+            required=true
+          fi
+
+          echo "required=$required" >>"$GITHUB_OUTPUT"
+
       - name: Set up Go
+        if: ${{ steps.release_check.outputs.required == 'true' }}
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
 
       - name: Set up Node
-        if: ${{ inputs.frontend }}
+        if: ${{ inputs.frontend && steps.release_check.outputs.required == 'true' }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ inputs.node-version }}
           package-manager-cache: false
 
       - name: Bootstrap tools
+        if: ${{ steps.release_check.outputs.required == 'true' }}
         run: opus-ci bootstrap full
 
       - name: Full CI before release
+        if: ${{ steps.release_check.outputs.required == 'true' }}
         run: make ci-full
 
   release-please:

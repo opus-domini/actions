@@ -39,3 +39,30 @@ jobs:
 
       - name: Validate
         run: actionlint
+
+      - name: Validate release orchestration contract
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          workflow=.github/workflows/release.yml
+          required_expressions=(
+            "github.event_name == 'workflow_dispatch'"
+            "github.event_name == 'push'"
+            'fetch-depth: 2'
+            'git diff-tree --no-commit-id --name-only -r'
+            'RELEASE_PLEASE_MANIFEST:'
+            'release-please-manifest'
+            'needs: release-gate'
+            "steps.release_check.outputs.required == 'true'"
+            "needs.release-please.outputs.release_created == 'true'"
+          )
+
+          for expression in "${required_expressions[@]}"; do
+            grep --fixed-strings --quiet "$expression" "$workflow"
+          done
+
+          test "$(grep --fixed-strings --count 'run: make ci-full' "$workflow")" -eq 2
+          test "$(grep --fixed-strings --count \
+            "steps.release_check.outputs.required == 'true'" "$workflow")" -eq 4
+          ! grep --fixed-strings --quiet 'github.event.head_commit.message' "$workflow"
