@@ -22,11 +22,11 @@ on:
         required: true
         type: string
       slots:
-        description: Number of contiguous slots to exercise
+        description: JSON array of zero-padded slot identifiers to exercise
         required: true
-        type: number
-      shared_labels:
-        description: JSON array of labels shared by every slot's runs-on
+        type: string
+      runs_on_template:
+        description: JSON array of runs-on labels with {0} as the slot placeholder
         required: true
         type: string
 
@@ -37,67 +37,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  plan:
-    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-    runs-on: ${{ fromJSON(inputs.shared_labels) }}
-    timeout-minutes: 5
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-    steps:
-      - name: Plan slot matrix
-        id: plan
-        shell: bash
-        env:
-          SLOTS: ${{ inputs.slots }}
-          RUNNER_PREFIX: ${{ inputs.runner_prefix }}
-          SHARED_LABELS: ${{ inputs.shared_labels }}
-          INSTALL_ID: ${{ inputs.install_id }}
-        run: |
-          set -euo pipefail
-
-          [[ "$SLOTS" =~ ^[0-9]+$ ]] || {
-            printf '%s\n' 'error: slots must be an integer' >&2
-            exit 1
-          }
-          (( SLOTS >= 1 && SLOTS <= 99 )) || {
-            printf '%s\n' 'error: slots must be between 1 and 99' >&2
-            exit 1
-          }
-          [[ -n "$RUNNER_PREFIX" ]] || {
-            printf '%s\n' 'error: runner_prefix must not be empty' >&2
-            exit 1
-          }
-          jq -e 'type == "array" and length > 0 and all(.[]; type == "string")' \
-            <<<"$SHARED_LABELS" >/dev/null || {
-            printf '%s\n' 'error: shared_labels must be a non-empty JSON string array' >&2
-            exit 1
-          }
-          if [[ -n "$INSTALL_ID" ]]; then
-            [[ "$INSTALL_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
-              printf '%s\n' 'error: install_id is malformed' >&2
-              exit 1
-            }
-          fi
-
-          include='[]'
-          for (( slot = 1; slot <= SLOTS; slot++ )); do
-            printf -v padded '%02d' "$slot"
-            runner="$RUNNER_PREFIX$padded"
-            labels="$(jq -cn --argjson shared "$SHARED_LABELS" --arg runner "$runner" \
-              '$shared + [$runner]')"
-            include="$(jq -c --arg slot "$padded" --arg runner "$runner" --arg labels "$labels" \
-              '. + [{slot: $slot, runner: $runner, labels: $labels}]' <<<"$include")"
-          done
-
-          printf 'matrix=%s\n' "$include" >>"$GITHUB_OUTPUT"
-
   slot:
-    needs: plan
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
-    runs-on: ${{ fromJSON(matrix.labels) }}
+        slot: ${{ fromJSON(inputs.slots) }}
+    runs-on: ${{ fromJSON(format(inputs.runs_on_template, matrix.slot)) }}
     timeout-minutes: 5
     steps:
       - name: Verify container runner contract
@@ -105,11 +51,18 @@ jobs:
         env:
           EXPECTED_POOL: ${{ inputs.pool }}
           EXPECTED_PROFILE: ${{ inputs.profile }}
-          EXPECTED_RUNNER: ${{ matrix.runner }}
+          EXPECTED_RUNNER: ${{ inputs.runner_prefix }}${{ matrix.slot }}
           EXPECTED_SLOT: ${{ matrix.slot }}
           INSTALL_ID: ${{ inputs.install_id }}
         run: |
           set -euo pipefail
+
+          if [[ -n "$INSTALL_ID" ]]; then
+            [[ "$INSTALL_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
+              printf '%s\n' 'error: install_id is malformed' >&2
+              exit 1
+            }
+          fi
 
           [[ "$RUNNER_OS" == 'Linux' ]]
           [[ "$RUNNER_ARCH" == 'X64' ]]
