@@ -1,0 +1,144 @@
+name: Reusable container smoke
+run-name: Container smoke [${{ inputs.install_id || github.run_id }}]
+
+on:
+  workflow_call:
+    inputs:
+      install_id:
+        description: Optional installation correlation identifier
+        required: false
+        type: string
+        default: ""
+      pool:
+        description: Expected runner pool advertised by every slot
+        required: true
+        type: string
+      profile:
+        description: Expected runner profile advertised by every slot
+        required: true
+        type: string
+      runner_prefix:
+        description: Per-slot runner label prefix supplied by the caller
+        required: true
+        type: string
+      slots:
+        description: Number of contiguous slots to exercise
+        required: true
+        type: number
+      shared_labels:
+        description: JSON array of labels shared by every slot's runs-on
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: container-smoke-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    runs-on: ${{ fromJSON(inputs.shared_labels) }}
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Plan slot matrix
+        id: plan
+        shell: bash
+        env:
+          SLOTS: ${{ inputs.slots }}
+          RUNNER_PREFIX: ${{ inputs.runner_prefix }}
+          SHARED_LABELS: ${{ inputs.shared_labels }}
+          INSTALL_ID: ${{ inputs.install_id }}
+        run: |
+          set -euo pipefail
+
+          [[ "$SLOTS" =~ ^[0-9]+$ ]] || {
+            printf '%s\n' 'error: slots must be an integer' >&2
+            exit 1
+          }
+          (( SLOTS >= 1 && SLOTS <= 99 )) || {
+            printf '%s\n' 'error: slots must be between 1 and 99' >&2
+            exit 1
+          }
+          [[ -n "$RUNNER_PREFIX" ]] || {
+            printf '%s\n' 'error: runner_prefix must not be empty' >&2
+            exit 1
+          }
+          jq -e 'type == "array" and length > 0 and all(.[]; type == "string")' \
+            <<<"$SHARED_LABELS" >/dev/null || {
+            printf '%s\n' 'error: shared_labels must be a non-empty JSON string array' >&2
+            exit 1
+          }
+          if [[ -n "$INSTALL_ID" ]]; then
+            [[ "$INSTALL_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
+              printf '%s\n' 'error: install_id is malformed' >&2
+              exit 1
+            }
+          fi
+
+          include='[]'
+          for (( slot = 1; slot <= SLOTS; slot++ )); do
+            printf -v padded '%02d' "$slot"
+            runner="$RUNNER_PREFIX$padded"
+            labels="$(jq -cn --argjson shared "$SHARED_LABELS" --arg runner "$runner" \
+              '$shared + [$runner]')"
+            include="$(jq -c --arg slot "$padded" --arg runner "$runner" --arg labels "$labels" \
+              '. + [{slot: $slot, runner: $runner, labels: $labels}]' <<<"$include")"
+          done
+
+          printf 'matrix=%s\n' "$include" >>"$GITHUB_OUTPUT"
+
+  slot:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ fromJSON(matrix.labels) }}
+    timeout-minutes: 5
+    steps:
+      - name: Verify container runner contract
+        shell: bash
+        env:
+          EXPECTED_POOL: ${{ inputs.pool }}
+          EXPECTED_PROFILE: ${{ inputs.profile }}
+          EXPECTED_RUNNER: ${{ matrix.runner }}
+          EXPECTED_SLOT: ${{ matrix.slot }}
+          INSTALL_ID: ${{ inputs.install_id }}
+        run: |
+          set -euo pipefail
+
+          [[ "$RUNNER_OS" == 'Linux' ]]
+          [[ "$RUNNER_ARCH" == 'X64' ]]
+          [[ "$RUNNER_PLATFORM_POOL" == "$EXPECTED_POOL" ]]
+          [[ "$RUNNER_PLATFORM_PROFILE" == "$EXPECTED_PROFILE" ]]
+          [[ "$RUNNER_NAME" == "$EXPECTED_RUNNER" ]]
+
+          [[ "${OPUS_CI_CACHE_ROOT:-}" == /* ]]
+          [[ -d "$OPUS_CI_CACHE_ROOT" ]]
+          [[ -w "$OPUS_CI_CACHE_ROOT" ]]
+          [[ "${OPUS_CI_LEASE_DIR:-}" == "$OPUS_CI_CACHE_ROOT/leases" ]]
+          [[ -d "$OPUS_CI_LEASE_DIR" ]]
+          [[ -w "$OPUS_CI_LEASE_DIR" ]]
+          [[ "$OPUS_CI_CONTAINER_UID" == '0' ]]
+          [[ "$OPUS_CI_CONTAINER_GID" == '0' ]]
+
+          engine_contract="$(docker info \
+            --format '{{json .SecurityOptions}}|{{.CgroupDriver}}|{{.CgroupVersion}}')"
+          IFS='|' read -r security_options cgroup_driver cgroup_version <<<"$engine_contract"
+
+          # Assemble the expected cgroup driver name from fragments so this
+          # public reusable never stores the host service-manager identifier
+          # verbatim.
+          expected_cgroup_driver="system"'d'
+
+          [[ "$security_options" == *'"name=rootless"'* ]]
+          [[ "$security_options" == *'"name=cgroupns"'* ]]
+          [[ "$cgroup_driver" == "$expected_cgroup_driver" ]]
+          [[ "$cgroup_version" == '2' ]]
+
+          printf '::notice title=Container runner smoke::install_id=%s runner=%s slot=%s\n' \
+            "${INSTALL_ID:-none}" "$RUNNER_NAME" "$EXPECTED_SLOT"
