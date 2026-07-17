@@ -18,6 +18,11 @@ on:
         required: false
         type: string
         default: v1.6.0
+      goreleaser-version:
+        description: GoReleaser version used by repository Make targets
+        required: false
+        type: string
+        default: v2.17.0
       node-version:
         description: Node major or exact version for frontend repositories
         required: false
@@ -138,6 +143,12 @@ jobs:
           node-version: ${{ inputs.node-version }}
           package-manager-cache: false
 
+      - name: Set up GoReleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: ${{ inputs.goreleaser-version }}
+          install-only: true
+
       - name: Bootstrap tools
         run: opus-ci bootstrap full
 
@@ -220,7 +231,7 @@ jobs:
     env:
       GOLANGCI_LINT_VERSION: ${{ inputs.golangci-lint-version }}
       GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
-      GORELEASER_VERSION: v2.17.0
+      GORELEASER_VERSION: ${{ inputs.goreleaser-version }}
       NPM_VERSION: ${{ inputs.npm-version }}
       OPUS_CI_FRONTEND: ${{ inputs.frontend }}
       SYFT_VERSION: v1.46.0
@@ -244,6 +255,12 @@ jobs:
         with:
           node-version: ${{ inputs.node-version }}
           package-manager-cache: false
+
+      - name: Set up GoReleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: ${{ env.GORELEASER_VERSION }}
+          install-only: true
 
       - name: Set up Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
