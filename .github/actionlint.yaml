@@ -1,6 +1,6 @@
 self-hosted-runner:
   labels:
-    - runner-platform-ci
-    - runner-platform-release
+    - ductor-ci
+    - ductor-release
 
 config-variables: null

@@ -66,18 +66,18 @@ jobs:
 
           [[ "$RUNNER_OS" == 'Linux' ]]
           [[ "$RUNNER_ARCH" == 'X64' ]]
-          [[ "$RUNNER_PLATFORM_POOL" == "$EXPECTED_POOL" ]]
-          [[ "$RUNNER_PLATFORM_PROFILE" == "$EXPECTED_PROFILE" ]]
+          [[ "$DUCTOR_POOL" == "$EXPECTED_POOL" ]]
+          [[ "$DUCTOR_PROFILE" == "$EXPECTED_PROFILE" ]]
           [[ "$RUNNER_NAME" == "$EXPECTED_RUNNER" ]]
 
-          [[ "${OPUS_CI_CACHE_ROOT:-}" == /* ]]
-          [[ -d "$OPUS_CI_CACHE_ROOT" ]]
-          [[ -w "$OPUS_CI_CACHE_ROOT" ]]
-          [[ "${OPUS_CI_LEASE_DIR:-}" == "$OPUS_CI_CACHE_ROOT/leases" ]]
-          [[ -d "$OPUS_CI_LEASE_DIR" ]]
-          [[ -w "$OPUS_CI_LEASE_DIR" ]]
-          [[ "$OPUS_CI_CONTAINER_UID" == '0' ]]
-          [[ "$OPUS_CI_CONTAINER_GID" == '0' ]]
+          [[ "${DUCTOR_CACHE_ROOT:-}" == /* ]]
+          [[ -d "$DUCTOR_CACHE_ROOT" ]]
+          [[ -w "$DUCTOR_CACHE_ROOT" ]]
+          [[ "${DUCTOR_LEASE_DIR:-}" == "$DUCTOR_CACHE_ROOT/leases" ]]
+          [[ -d "$DUCTOR_LEASE_DIR" ]]
+          [[ -w "$DUCTOR_LEASE_DIR" ]]
+          [[ "$DUCTOR_CONTAINER_UID" == '0' ]]
+          [[ "$DUCTOR_CONTAINER_GID" == '0' ]]
 
           engine_contract="$(docker info \
             --format '{{json .SecurityOptions}}|{{.CgroupDriver}}|{{.CgroupVersion}}')"

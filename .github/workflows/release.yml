@@ -64,7 +64,7 @@ jobs:
           github.event.pull_request.head.repo.full_name == github.repository &&
           startsWith(github.event.pull_request.head.ref, format('release-please--branches--{0}', github.event.repository.default_branch)) &&
           contains(github.event.pull_request.labels.*.name, 'autorelease: pending') }}
-    runs-on: runner-platform-release
+    runs-on: ductor-release
     timeout-minutes: 30
     permissions:
       contents: read
@@ -72,7 +72,7 @@ jobs:
       GOLANGCI_LINT_VERSION: ${{ inputs.golangci-lint-version }}
       GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
       NPM_VERSION: ${{ inputs.npm-version }}
-      OPUS_CI_FRONTEND: ${{ inputs.frontend }}
+      DUCTOR_FRONTEND: ${{ inputs.frontend }}
     outputs:
       tag_name: ${{ steps.release_check.outputs.tag_name }}
     steps:
@@ -150,14 +150,14 @@ jobs:
           install-only: true
 
       - name: Bootstrap tools
-        run: opus-ci bootstrap full
+        run: ductor-ci bootstrap full
 
       - name: Full CI before release
         run: make ci-full
 
   release-please:
     needs: release-gate
-    runs-on: runner-platform-release
+    runs-on: ductor-release
     timeout-minutes: 10
     permissions:
       contents: write
@@ -223,7 +223,7 @@ jobs:
     needs:
       - release-gate
       - release-please
-    runs-on: runner-platform-release
+    runs-on: ductor-release
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
       contents: write
@@ -233,7 +233,7 @@ jobs:
       GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
       GORELEASER_VERSION: ${{ inputs.goreleaser-version }}
       NPM_VERSION: ${{ inputs.npm-version }}
-      OPUS_CI_FRONTEND: ${{ inputs.frontend }}
+      DUCTOR_FRONTEND: ${{ inputs.frontend }}
       SYFT_VERSION: v1.46.0
     steps:
       - name: Checkout release tag
@@ -270,7 +270,7 @@ jobs:
           use-sudo: false
 
       - name: Bootstrap tools
-        run: opus-ci bootstrap release
+        run: ductor-ci bootstrap release
 
       - name: Full CI against the tagged commit
         run: make ci-full

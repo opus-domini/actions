@@ -79,7 +79,7 @@ jobs:
       GOLANGCI_LINT_VERSION: ${{ inputs.golangci-lint-version }}
       GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
       NPM_VERSION: ${{ inputs.npm-version }}
-      OPUS_CI_FRONTEND: ${{ inputs.frontend }}
+      DUCTOR_FRONTEND: ${{ inputs.frontend }}
     steps: &ci-steps
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -110,7 +110,7 @@ jobs:
 
       - name: Bootstrap tools
         if: ${{ github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository) }}
-        run: opus-ci bootstrap full
+        run: ductor-ci bootstrap full
 
       - name: Bootstrap hosted tools
         if: ${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
@@ -125,7 +125,7 @@ jobs:
             "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
           echo "$tool_dir" >>"$GITHUB_PATH"
           echo "GOLANGCI_LINT_CACHE=$RUNNER_TEMP/golangci-lint-cache" >>"$GITHUB_ENV"
-          if [[ "$OPUS_CI_FRONTEND" == true ]]; then
+          if [[ "$DUCTOR_FRONTEND" == true ]]; then
             npm_prefix="$RUNNER_TEMP/npm"
             npm install --global --prefix "$npm_prefix" "npm@$NPM_VERSION"
             echo "$npm_prefix/bin" >>"$GITHUB_PATH"
@@ -144,7 +144,7 @@ jobs:
 
   full-trusted:
     if: ${{ (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || github.event.pull_request.base.ref == github.event.repository.default_branch) && (github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)) }}
-    runs-on: runner-platform-ci
+    runs-on: ductor-ci
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env: *ci-env
     steps: *ci-steps

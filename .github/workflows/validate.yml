@@ -80,7 +80,7 @@ jobs:
             "github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
             "github.event_name != 'pull_request' || github.event.pull_request.base.ref == github.event.repository.default_branch"
             "github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)"
-            "runs-on: runner-platform-ci"
+            "runs-on: ductor-ci"
           )
           for expression in "${ci_expressions[@]}"; do
             grep --fixed-strings --quiet "$expression" "$ci_workflow"
@@ -103,16 +103,16 @@ jobs:
             "$vulnerability_workflow"
 
           ci_selector_count="$(awk \
-            'index($0, "runs-on: runner-platform-ci") { count++ } END { print count + 0 }' \
+            'index($0, "runs-on: ductor-ci") { count++ } END { print count + 0 }' \
             "${workflows[@]}")"
           release_selector_count="$(awk \
-            'index($0, "runs-on: runner-platform-release") { count++ } END { print count + 0 }' \
+            'index($0, "runs-on: ductor-release") { count++ } END { print count + 0 }' \
             "${workflows[@]}")"
           test "$ci_selector_count" -eq 3
           test "$release_selector_count" -eq 6
 
-          grep --fixed-strings --quiet '    - runner-platform-ci' .github/actionlint.yaml
-          grep --fixed-strings --quiet '    - runner-platform-release' .github/actionlint.yaml
+          grep --fixed-strings --quiet '    - ductor-ci' .github/actionlint.yaml
+          grep --fixed-strings --quiet '    - ductor-release' .github/actionlint.yaml
           if grep --extended-regexp --quiet \
             '^[[:space:]]{6}(group|labels):' \
             "${workflows[@]}"; then
@@ -125,10 +125,10 @@ jobs:
             'run-name: Runner smoke ['
             "github.event_name == 'workflow_dispatch'"
             "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
-            'run: opus-ci bootstrap full'
-            'run: opus-ci bootstrap release'
-            "test \"\${OPUS_RUNNER_TRUST:-}\" = ci"
-            "test \"\${OPUS_RUNNER_TRUST:-}\" = release"
+            'run: ductor-ci bootstrap full'
+            'run: ductor-ci bootstrap release'
+            "test \"\${DUCTOR_TRUST:-}\" = ci"
+            "test \"\${DUCTOR_TRUST:-}\" = release"
           )
           for expression in "${smoke_expressions[@]}"; do
             grep --fixed-strings --quiet "$expression" "$smoke_workflow"
