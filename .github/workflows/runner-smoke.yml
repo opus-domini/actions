@@ -59,6 +59,7 @@ jobs:
     runs-on: ductor-release
     timeout-minutes: 20
     env:
+      COSIGN_VERSION: v3.1.1
       SYFT_VERSION: v1.46.0
     steps:
       - name: Set up Go
@@ -73,13 +74,6 @@ jobs:
           node-version: "26"
           package-manager-cache: false
 
-      - name: Set up Cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-        with:
-          cosign-release: v3.1.1
-          install-dir: ${{ runner.temp }}/cosign
-          use-sudo: false
-
       - name: Bootstrap release tools
         run: ductor-ci bootstrap release
 
@@ -89,6 +83,9 @@ jobs:
           set -euo pipefail
 
           test "${DUCTOR_TRUST:-}" = release
-          for executable in go node npm golangci-lint govulncheck syft cosign ductor-ci; do
+          for executable in go node npm syft cosign ductor-ci; do
             command -v "$executable" >/dev/null
+          done
+          for executable in golangci-lint govulncheck; do
+            ! command -v "$executable" >/dev/null
           done

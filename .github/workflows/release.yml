@@ -8,16 +8,6 @@ on:
         required: false
         type: boolean
         default: false
-      golangci-lint-version:
-        description: golangci-lint version used by the repository Make targets
-        required: false
-        type: string
-        default: v2.12.2
-      govulncheck-version:
-        description: govulncheck version used by the repository Make targets
-        required: false
-        type: string
-        default: v1.6.0
       goreleaser-version:
         description: GoReleaser version used by repository Make targets
         required: false
@@ -64,15 +54,11 @@ jobs:
           github.event.pull_request.head.repo.full_name == github.repository &&
           startsWith(github.event.pull_request.head.ref, format('release-please--branches--{0}', github.event.repository.default_branch)) &&
           contains(github.event.pull_request.labels.*.name, 'autorelease: pending') }}
-    runs-on: ductor-release
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
     permissions:
+      actions: read
       contents: read
-    env:
-      GOLANGCI_LINT_VERSION: ${{ inputs.golangci-lint-version }}
-      GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
-      NPM_VERSION: ${{ inputs.npm-version }}
-      DUCTOR_FRONTEND: ${{ inputs.frontend }}
     outputs:
       tag_name: ${{ steps.release_check.outputs.tag_name }}
     steps:
@@ -130,30 +116,68 @@ jobs:
 
           echo "tag_name=$tag_name" >>"$GITHUB_OUTPUT"
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: false
+      - name: Wait for exact successful CI
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Set up Node
-        if: ${{ inputs.frontend }}
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: ${{ inputs.node-version }}
-          package-manager-cache: false
+          deadline=$((SECONDS + 1800))
+          while (( SECONDS < deadline )); do
+            response="$(gh api \
+              --method GET \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+              -f branch="$DEFAULT_BRANCH" \
+              -f event=push \
+              -f head_sha="$RELEASE_SHA" \
+              -f per_page=100)"
+            run="$(jq -r \
+              --arg branch "$DEFAULT_BRANCH" \
+              --arg sha "$RELEASE_SHA" \
+              '
+                [.workflow_runs[]
+                  | select(.path == ".github/workflows/ci.yml")
+                  | select(.event == "push")
+                  | select(.head_sha == $sha)
+                  | select(.head_branch == $branch)]
+                | sort_by(.created_at, .id)
+                | reverse
+                | first
+                | if . == null then "" else [.id, .status, (.conclusion // "")] | @tsv end
+              ' <<<"$response")"
 
-      - name: Set up GoReleaser
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
-        with:
-          version: ${{ inputs.goreleaser-version }}
-          install-only: true
+            if [[ -z "$run" ]]; then
+              sleep 15
+              continue
+            fi
 
-      - name: Bootstrap tools
-        run: ductor-ci bootstrap full
+            IFS=$'\t' read -r run_id status conclusion <<<"$run"
+            case "$status" in
+              completed)
+                if [[ "$conclusion" == success ]]; then
+                  echo "Exact CI run ${run_id} completed successfully."
+                  exit 0
+                fi
+                echo "::error title=Release CI failed::Exact CI run ${run_id} completed with ${conclusion:-no conclusion}."
+                exit 1
+                ;;
+              queued|in_progress|pending|requested|waiting)
+                echo "Exact CI run ${run_id} is ${status}; waiting."
+                ;;
+              *)
+                echo "::error title=Invalid CI state::Exact CI run ${run_id} has unsupported status ${status}."
+                exit 1
+                ;;
+            esac
 
-      - name: Full CI before release
-        run: make ci-full
+            sleep 15
+          done
+
+          echo "::error title=Release CI timeout::No completed successful push CI for ${RELEASE_SHA} was found within 30 minutes."
+          exit 1
 
   release-please:
     needs: release-gate
@@ -229,11 +253,10 @@ jobs:
       contents: write
       id-token: write
     env:
-      GOLANGCI_LINT_VERSION: ${{ inputs.golangci-lint-version }}
-      GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
       GORELEASER_VERSION: ${{ inputs.goreleaser-version }}
       NPM_VERSION: ${{ inputs.npm-version }}
       DUCTOR_FRONTEND: ${{ inputs.frontend }}
+      COSIGN_VERSION: v3.1.1
       SYFT_VERSION: v1.46.0
     steps:
       - name: Checkout release tag
@@ -256,24 +279,8 @@ jobs:
           node-version: ${{ inputs.node-version }}
           package-manager-cache: false
 
-      - name: Set up GoReleaser
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
-        with:
-          version: ${{ env.GORELEASER_VERSION }}
-          install-only: true
-
-      - name: Set up Cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-        with:
-          cosign-release: v3.1.1
-          install-dir: ${{ runner.temp }}/cosign
-          use-sudo: false
-
       - name: Bootstrap tools
         run: ductor-ci bootstrap release
-
-      - name: Full CI against the tagged commit
-        run: make ci-full
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3

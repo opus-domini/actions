@@ -131,7 +131,12 @@ jobs:
             echo "$npm_prefix/bin" >>"$GITHUB_PATH"
           fi
 
+      - name: Fast CI
+        if: ${{ github.event_name == 'pull_request' }}
+        run: make ci-fast
+
       - name: Full CI
+        if: ${{ github.event_name != 'pull_request' }}
         run: make ci-full
 
       - name: Upload coverage to Codecov
