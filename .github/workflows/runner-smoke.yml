@@ -87,5 +87,8 @@ jobs:
             command -v "$executable" >/dev/null
           done
           for executable in golangci-lint govulncheck; do
-            ! command -v "$executable" >/dev/null
+            if command -v "$executable" >/dev/null; then
+              echo "::error title=Unexpected CI tool::${executable} is available in release scope."
+              exit 1
+            fi
           done
