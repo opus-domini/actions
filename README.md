@@ -16,9 +16,9 @@ Pull requests never execute `make ci-full` through the reusable CI workflow.
 
 ## Release contract
 
-Release PR classification is hosted and read-only. Creating or updating the
-Release Please pull request is the only release-identity operation in that
-workflow.
+Release PR classification runs on the trusted CI runner and remains read-only.
+Creating or updating the Release Please pull request is the only
+release-identity operation in that workflow.
 
 Publication accepts only a merged Release Please pull request targeting the
 default branch from the same repository. Before any release mutation, a hosted,

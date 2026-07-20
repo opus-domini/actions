@@ -154,13 +154,14 @@ assert_workflow_contains "$vulnerability_workflow" \
   "(github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
 
 release_pr_workflow=.github/workflows/release-pr.yml
-assert_job_contains "$release_pr_workflow" classify 'runs-on: ubuntu-latest'
+assert_job_contains "$release_pr_workflow" classify 'runs-on: ductor-ci'
 assert_job_contains "$release_pr_workflow" classify 'permissions:'
 assert_job_contains "$release_pr_workflow" classify 'contents: read'
 assert_job_contains "$release_pr_workflow" release-please-pr 'runs-on: ductor-release'
 assert_job_contains "$release_pr_workflow" release-please-pr 'contents: write'
 assert_job_contains "$release_pr_workflow" release-please-pr 'skip-github-release: true'
 assert_job_excludes "$release_pr_workflow" classify 'ductor-release'
+assert_job_excludes "$release_pr_workflow" classify 'contents: write'
 
 publish_workflow=.github/workflows/release.yml
 assert_job_contains "$publish_workflow" release-gate 'runs-on: ubuntu-latest'
