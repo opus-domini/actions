@@ -173,7 +173,7 @@ assert_job_contains "$publish_workflow" release-gate 'repos/$GITHUB_REPOSITORY/c
 assert_job_contains "$publish_workflow" release-gate '[[ "$verification_sha" != "$default_sha" ]]'
 assert_job_contains "$publish_workflow" release-gate 'release_sha: ${{ steps.release_check.outputs.release_sha }}'
 assert_job_contains "$publish_workflow" release-gate 'ref: ${{ steps.resolve.outputs.verification_sha }}'
-assert_job_contains "$publish_workflow" release-gate 'git log -1 --format=%H -- "$RELEASE_PLEASE_MANIFEST"'
+assert_job_contains "$publish_workflow" release-gate 'git log --first-parent -1 --format=%H -- "$RELEASE_PLEASE_MANIFEST"'
 assert_job_contains "$publish_workflow" release-gate 'git merge-base --is-ancestor "$release_sha" "$VERIFICATION_SHA"'
 assert_job_contains "$publish_workflow" release-gate 'release_manifest_version'
 assert_job_contains "$publish_workflow" release-gate 'deadline=$((SECONDS + 1800))'

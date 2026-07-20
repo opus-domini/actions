@@ -160,7 +160,7 @@ jobs:
               exit 1
             fi
           else
-            release_sha="$(git log -1 --format=%H -- "$RELEASE_PLEASE_MANIFEST")"
+            release_sha="$(git log --first-parent -1 --format=%H -- "$RELEASE_PLEASE_MANIFEST")"
             if [[ ! "$release_sha" =~ ^[0-9a-f]{40}$ ]] \
               || ! git merge-base --is-ancestor "$release_sha" "$VERIFICATION_SHA"; then
               echo "::error title=Invalid release commit::The manifest release commit is not an ancestor of the recovery HEAD."
