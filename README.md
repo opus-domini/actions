@@ -22,10 +22,12 @@ that workflow with write permissions.
 
 Publication normally accepts a merged Release Please pull request targeting the
 default branch from the same repository. A caller may also expose a manual
-recovery input for the exact current default-branch commit. Before any release
-mutation, a read-only verifier on the dedicated release pool checks the commit
-and waits up to 30 minutes for the exact reusable CI push run at that commit to
-finish successfully. A stale recovery request or a missing, failed, cancelled,
+recovery input for the exact current default-branch commit. Recovery derives the
+canonical release target from the commit that last changed the current manifest
+version and requires it to be an ancestor of that current head. Before any
+release mutation, a read-only verifier on the dedicated release pool checks the
+target and waits up to 30 minutes for its exact reusable CI push run to finish
+successfully. A stale recovery request or a missing, failed, cancelled,
 mismatched, or timed-out CI run blocks publication.
 
 The publication job bootstraps release-only tools and invokes the GoReleaser

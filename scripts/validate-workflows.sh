@@ -170,8 +170,12 @@ assert_job_contains "$publish_workflow" release-gate 'contents: read'
 assert_job_contains "$publish_workflow" release-gate 'github.event_name == '\''workflow_dispatch'\'''
 assert_job_contains "$publish_workflow" release-gate "inputs.recovery_release_sha != ''"
 assert_job_contains "$publish_workflow" release-gate 'repos/$GITHUB_REPOSITORY/commits/$DEFAULT_BRANCH'
-assert_job_contains "$publish_workflow" release-gate '[[ "$release_sha" != "$default_sha" ]]'
-assert_job_contains "$publish_workflow" release-gate 'release_sha: ${{ steps.resolve.outputs.release_sha }}'
+assert_job_contains "$publish_workflow" release-gate '[[ "$verification_sha" != "$default_sha" ]]'
+assert_job_contains "$publish_workflow" release-gate 'release_sha: ${{ steps.release_check.outputs.release_sha }}'
+assert_job_contains "$publish_workflow" release-gate 'ref: ${{ steps.resolve.outputs.verification_sha }}'
+assert_job_contains "$publish_workflow" release-gate 'git log -1 --format=%H -- "$RELEASE_PLEASE_MANIFEST"'
+assert_job_contains "$publish_workflow" release-gate 'git merge-base --is-ancestor "$release_sha" "$VERIFICATION_SHA"'
+assert_job_contains "$publish_workflow" release-gate 'release_manifest_version'
 assert_job_contains "$publish_workflow" release-gate 'deadline=$((SECONDS + 1800))'
 assert_job_contains "$publish_workflow" release-gate 'actions/workflows/ci.yml/runs'
 assert_job_contains "$publish_workflow" release-gate 'select(.path == ".github/workflows/ci.yml")'
@@ -318,6 +322,31 @@ test "$(route_release pull_request closed true true true true true false false '
 test "$(route_release workflow_dispatch '' false false false false false false true release-sha)" = recover
 test "$(route_release workflow_dispatch '' false false false false false false false release-sha)" = rejected
 test "$(route_release workflow_dispatch '' false false false false false false true '')" = rejected
+
+recovery_target() {
+  local requested_head="$1"
+  local default_head="$2"
+  local manifest_commit="$3"
+  local ancestor="$4"
+  local manifest_changed="$5"
+  local version_matches="$6"
+
+  if [[ "$requested_head" == "$default_head" \
+    && "$ancestor" == true \
+    && "$manifest_changed" == true \
+    && "$version_matches" == true ]]; then
+    printf '%s\n' "$manifest_commit"
+  else
+    printf '%s\n' rejected
+  fi
+}
+
+test "$(recovery_target recovery-head recovery-head release-merge true true true)" = release-merge
+test "$(recovery_target release-merge release-merge release-merge true true true)" = release-merge
+test "$(recovery_target stale-head recovery-head release-merge true true true)" = rejected
+test "$(recovery_target recovery-head recovery-head release-merge false true true)" = rejected
+test "$(recovery_target recovery-head recovery-head release-merge true false true)" = rejected
+test "$(recovery_target recovery-head recovery-head release-merge true true false)" = rejected
 
 smoke_workflow=.github/workflows/runner-smoke.yml
 assert_workflow_contains "$smoke_workflow" 'permissions: {}'
