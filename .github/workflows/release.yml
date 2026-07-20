@@ -33,6 +33,11 @@ on:
         required: false
         type: string
         default: .github/.release-please-manifest.json
+      recovery_release_sha:
+        description: Exact current default-branch commit for a manual release recovery
+        required: false
+        type: string
+        default: ""
       timeout-minutes:
         description: Release build timeout
         required: false
@@ -46,26 +51,74 @@ concurrency:
 jobs:
   release-gate:
     if: >-
-      ${{ github.event_name == 'pull_request' &&
-          github.event.action == 'closed' &&
-          github.event.pull_request.merged == true &&
-          github.event.pull_request.base.ref == github.event.repository.default_branch &&
-          github.event.pull_request.base.repo.full_name == github.repository &&
-          github.event.pull_request.head.repo.full_name == github.repository &&
-          startsWith(github.event.pull_request.head.ref, format('release-please--branches--{0}', github.event.repository.default_branch)) &&
-          contains(github.event.pull_request.labels.*.name, 'autorelease: pending') }}
-    runs-on: ubuntu-latest
+      ${{ (github.event_name == 'pull_request' &&
+           github.event.action == 'closed' &&
+           github.event.pull_request.merged == true &&
+           github.event.pull_request.base.ref == github.event.repository.default_branch &&
+           github.event.pull_request.base.repo.full_name == github.repository &&
+           github.event.pull_request.head.repo.full_name == github.repository &&
+           startsWith(github.event.pull_request.head.ref, format('release-please--branches--{0}', github.event.repository.default_branch)) &&
+           contains(github.event.pull_request.labels.*.name, 'autorelease: pending')) ||
+          (github.event_name == 'workflow_dispatch' &&
+           github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+           inputs.recovery_release_sha != '') }}
+    runs-on: ductor-release
     timeout-minutes: 35
     permissions:
       actions: read
       contents: read
     outputs:
+      release_sha: ${{ steps.resolve.outputs.release_sha }}
       tag_name: ${{ steps.release_check.outputs.tag_name }}
     steps:
+      - name: Resolve release commit
+        id: resolve
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          RECOVERY_RELEASE_SHA: ${{ inputs.recovery_release_sha }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_PLEASE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$EVENT_NAME" in
+            pull_request)
+              release_sha="$RELEASE_PLEASE_SHA"
+              ;;
+            workflow_dispatch)
+              release_sha="$RECOVERY_RELEASE_SHA"
+              expected_ref="refs/heads/${DEFAULT_BRANCH}"
+              if [[ "$RELEASE_REF" != "$expected_ref" ]]; then
+                echo "::error title=Invalid recovery branch::Manual recovery must run from ${expected_ref}."
+                exit 1
+              fi
+              default_sha="$(gh api \
+                "repos/$GITHUB_REPOSITORY/commits/$DEFAULT_BRANCH" \
+                --jq .sha)"
+              if [[ "$release_sha" != "$default_sha" ]]; then
+                echo "::error title=Stale recovery commit::Requested ${release_sha}, current ${DEFAULT_BRANCH} is ${default_sha}."
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error title=Invalid release event::${EVENT_NAME} cannot publish a release."
+              exit 1
+              ;;
+          esac
+
+          if [[ ! "$release_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error title=Invalid release commit::Expected a complete lowercase commit SHA."
+            exit 1
+          fi
+          echo "release_sha=$release_sha" >>"$GITHUB_OUTPUT"
+
       - name: Checkout release commit
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          ref: ${{ steps.resolve.outputs.release_sha }}
           fetch-depth: 2
           fetch-tags: true
           persist-credentials: false
@@ -73,7 +126,8 @@ jobs:
       - name: Validate release commit
         id: release_check
         env:
-          RELEASE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_SHA: ${{ steps.resolve.outputs.release_sha }}
           RELEASE_PLEASE_MANIFEST: ${{ inputs.release-please-manifest }}
         shell: bash
         run: |
@@ -85,14 +139,16 @@ jobs:
             exit 1
           fi
 
-          if ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            echo "::error title=Invalid release commit::The parent of the release commit is unavailable."
-            exit 1
-          fi
+          if [[ "$EVENT_NAME" == pull_request ]]; then
+            if ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+              echo "::error title=Invalid release commit::The parent of the release commit is unavailable."
+              exit 1
+            fi
 
-          if git diff --quiet HEAD^ HEAD -- "$RELEASE_PLEASE_MANIFEST"; then
-            echo "::error title=Invalid release commit::The release manifest was not changed by this commit."
-            exit 1
+            if git diff --quiet HEAD^ HEAD -- "$RELEASE_PLEASE_MANIFEST"; then
+              echo "::error title=Invalid release commit::The release manifest was not changed by this commit."
+              exit 1
+            fi
           fi
 
           manifest_version="$(jq -er '
@@ -120,7 +176,7 @@ jobs:
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          RELEASE_SHA: ${{ steps.resolve.outputs.release_sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -224,7 +280,7 @@ jobs:
         env:
           EXPECTED_TAG_NAME: ${{ needs.release-gate.outputs.tag_name }}
           GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          RELEASE_SHA: ${{ needs.release-gate.outputs.release_sha }}
         shell: bash
         run: |
           set -euo pipefail

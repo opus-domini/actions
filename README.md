@@ -20,11 +20,13 @@ Release PR classification runs on the dedicated release runner with a read-only
 token. Creating or updating the Release Please pull request is the only job in
 that workflow with write permissions.
 
-Publication accepts only a merged Release Please pull request targeting the
-default branch from the same repository. Before any release mutation, a hosted,
-read-only verifier checks the merge commit and waits up to 30 minutes for the
-exact reusable CI push run at that commit to finish successfully. A missing,
-failed, cancelled, mismatched, or timed-out run blocks publication.
+Publication normally accepts a merged Release Please pull request targeting the
+default branch from the same repository. A caller may also expose a manual
+recovery input for the exact current default-branch commit. Before any release
+mutation, a read-only verifier on the dedicated release pool checks the commit
+and waits up to 30 minutes for the exact reusable CI push run at that commit to
+finish successfully. A stale recovery request or a missing, failed, cancelled,
+mismatched, or timed-out CI run blocks publication.
 
 The publication job bootstraps release-only tools and invokes the GoReleaser
 action exactly once. CI is not repeated during publication.

@@ -163,9 +163,15 @@ assert_job_contains "$release_pr_workflow" release-please-pr 'skip-github-releas
 assert_job_excludes "$release_pr_workflow" classify 'contents: write'
 
 publish_workflow=.github/workflows/release.yml
-assert_job_contains "$publish_workflow" release-gate 'runs-on: ubuntu-latest'
+assert_workflow_contains "$publish_workflow" 'recovery_release_sha:'
+assert_job_contains "$publish_workflow" release-gate 'runs-on: ductor-release'
 assert_job_contains "$publish_workflow" release-gate 'actions: read'
 assert_job_contains "$publish_workflow" release-gate 'contents: read'
+assert_job_contains "$publish_workflow" release-gate 'github.event_name == '\''workflow_dispatch'\'''
+assert_job_contains "$publish_workflow" release-gate "inputs.recovery_release_sha != ''"
+assert_job_contains "$publish_workflow" release-gate 'repos/$GITHUB_REPOSITORY/commits/$DEFAULT_BRANCH'
+assert_job_contains "$publish_workflow" release-gate '[[ "$release_sha" != "$default_sha" ]]'
+assert_job_contains "$publish_workflow" release-gate 'release_sha: ${{ steps.resolve.outputs.release_sha }}'
 assert_job_contains "$publish_workflow" release-gate 'deadline=$((SECONDS + 1800))'
 assert_job_contains "$publish_workflow" release-gate 'actions/workflows/ci.yml/runs'
 assert_job_contains "$publish_workflow" release-gate 'select(.path == ".github/workflows/ci.yml")'
@@ -175,6 +181,7 @@ assert_job_contains "$publish_workflow" release-gate 'select(.head_branch == $br
 assert_job_contains "$publish_workflow" release-gate 'completed)'
 assert_job_contains "$publish_workflow" release-gate '[[ "$conclusion" == success ]]'
 assert_job_excludes "$publish_workflow" release-gate 'contents: write'
+assert_job_excludes "$publish_workflow" release-gate 'runs-on: ubuntu-latest'
 assert_job_excludes "$publish_workflow" release-gate 'make ci-'
 assert_job_excludes "$publish_workflow" release-gate 'actions/setup-go@'
 assert_job_excludes "$publish_workflow" release-gate 'actions/setup-node@'
@@ -282,6 +289,8 @@ route_release() {
   local same_head_repository="$6"
   local release_branch="$7"
   local pending_label="$8"
+  local default_ref="${9}"
+  local recovery_sha="${10}"
 
   if [[ "$event_name" == pull_request \
     && "$action" == closed \
@@ -292,16 +301,23 @@ route_release() {
     && "$release_branch" == true \
     && "$pending_label" == true ]]; then
     printf '%s\n' verify
+  elif [[ "$event_name" == workflow_dispatch \
+    && "$default_ref" == true \
+    && -n "$recovery_sha" ]]; then
+    printf '%s\n' recover
   else
     printf '%s\n' rejected
   fi
 }
 
-test "$(route_release pull_request closed true true true true true true)" = verify
-test "$(route_release pull_request closed true true true false true true)" = rejected
-test "$(route_release pull_request closed false true true true true true)" = rejected
-test "$(route_release pull_request closed true true true true false true)" = rejected
-test "$(route_release pull_request closed true true true true true false)" = rejected
+test "$(route_release pull_request closed true true true true true true false '')" = verify
+test "$(route_release pull_request closed true true true false true true false '')" = rejected
+test "$(route_release pull_request closed false true true true true true false '')" = rejected
+test "$(route_release pull_request closed true true true true false true false '')" = rejected
+test "$(route_release pull_request closed true true true true true false false '')" = rejected
+test "$(route_release workflow_dispatch '' false false false false false false true release-sha)" = recover
+test "$(route_release workflow_dispatch '' false false false false false false false release-sha)" = rejected
+test "$(route_release workflow_dispatch '' false false false false false false true '')" = rejected
 
 smoke_workflow=.github/workflows/runner-smoke.yml
 assert_workflow_contains "$smoke_workflow" 'permissions: {}'
