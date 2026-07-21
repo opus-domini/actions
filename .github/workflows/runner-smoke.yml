@@ -9,6 +9,11 @@ on:
         required: false
         type: string
         default: ""
+      services:
+        description: Select the private service-container CI runtime
+        required: false
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -21,12 +26,14 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ductor-ci
     timeout-minutes: 20
+    env:
+      DUCTOR_RUNTIME: ${{ inputs.services && 'go-node-services' || 'go-node' }}
     steps:
       - name: Verify CI runtime capacity
         run: |
           ductor image status --pool "$DUCTOR_POOL"
           # shellcheck disable=SC2016
-          ductor run --runtime go-node -- sh -euc '
+          ductor run --runtime "$DUCTOR_RUNTIME" -- sh -euc '
             for executable in go node npm golangci-lint govulncheck; do
               command -v "$executable" >/dev/null
             done
@@ -34,6 +41,13 @@ jobs:
               ! command -v "$executable" >/dev/null
             done
           '
+          if [[ "$DUCTOR_RUNTIME" == go-node-services ]]; then
+            ductor run --runtime "$DUCTOR_RUNTIME" -- sh -euc \
+              'socket_path="${DOCKER_HOST#unix://}"; test "$socket_path" != "$DOCKER_HOST"; test -S "$socket_path"'
+          else
+            ductor run --runtime "$DUCTOR_RUNTIME" -- sh -euc \
+              'test -z "${DOCKER_HOST:-}"'
+          fi
 
   release-runner:
     needs: ci-runner
