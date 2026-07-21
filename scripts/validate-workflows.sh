@@ -23,6 +23,7 @@ for expected in \
   'id-token: write' \
   'provenance: mode=max' \
   'sbom: true' \
+  'DOCKER_CLI_IMAGE=${{ steps.build.outputs.docker_cli_image }}' \
   'cosign sign --yes'; do
   grep --fixed-strings --quiet -- "$expected" "$runtime_workflow" \
     || fail "${runtime_workflow} must contain: ${expected}"

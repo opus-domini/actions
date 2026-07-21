@@ -64,6 +64,7 @@ jobs:
             echo "go_image=${GO_IMAGE}"
             echo "node_image=${NODE_IMAGE}"
             echo "golangci_lint_image=${GOLANGCI_LINT_IMAGE}"
+            echo "docker_cli_image=${DOCKER_CLI_IMAGE}"
             echo "goreleaser_image=${GORELEASER_IMAGE}"
             echo "syft_image=${SYFT_IMAGE}"
             echo "cosign_image=${COSIGN_IMAGE}"
@@ -97,6 +98,7 @@ jobs:
           build-args: |
             BUILD_DATE=${{ steps.build.outputs.build_date }}
             COSIGN_IMAGE=${{ steps.build.outputs.cosign_image }}
+            DOCKER_CLI_IMAGE=${{ steps.build.outputs.docker_cli_image }}
             GOLANGCI_LINT_IMAGE=${{ steps.build.outputs.golangci_lint_image }}
             GORELEASER_IMAGE=${{ steps.build.outputs.goreleaser_image }}
             GOVULNCHECK_VERSION=${{ steps.build.outputs.govulncheck_version }}
