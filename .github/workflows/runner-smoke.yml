@@ -42,9 +42,11 @@ jobs:
             done
           '
           if [[ "$DUCTOR_RUNTIME" == go-node-services ]]; then
+            # shellcheck disable=SC2016
             ductor run --runtime "$DUCTOR_RUNTIME" -- sh -euc \
               'socket_path="${DOCKER_HOST#unix://}"; test "$socket_path" != "$DOCKER_HOST"; test -S "$socket_path"'
           else
+            # shellcheck disable=SC2016
             ductor run --runtime "$DUCTOR_RUNTIME" -- sh -euc \
               'test -z "${DOCKER_HOST:-}"'
           fi
