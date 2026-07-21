@@ -38,6 +38,10 @@ variable "GOLANGCI_LINT_IMAGE" {
   default = "golangci/golangci-lint:v2.12.2@sha256:5cceeef04e53efe1470638d4b4b4f5ceefd574955ab3941b2d9a68a8c9ad5240"
 }
 
+variable "DOCKER_CLI_IMAGE" {
+  default = "docker:29.1.5-cli@sha256:05dfa31f4afd64888ef4cc0cbb1ab4d07a4828ef01cd29baa891fecbe50faf49"
+}
+
 variable "GORELEASER_IMAGE" {
   default = "goreleaser/goreleaser:v2.17.0@sha256:054eefd282c02233a2556ce2d1a60cd2f51dc565ffc2520dc38b5deb4dd1ad30"
 }
@@ -77,6 +81,7 @@ target "common" {
   sbom       = true
   args = {
     BUILD_DATE          = BUILD_DATE
+    DOCKER_CLI_IMAGE    = DOCKER_CLI_IMAGE
     GO_IMAGE            = GO_IMAGE
     NODE_IMAGE          = NODE_IMAGE
     GOLANGCI_LINT_IMAGE = GOLANGCI_LINT_IMAGE

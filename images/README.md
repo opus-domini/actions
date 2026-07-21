@@ -8,7 +8,7 @@ immutable digests, pools, trust domains, mounts, and resource limits.
 | Image | Capability |
 | --- | --- |
 | `ghcr.io/opus-domini/ci-go` | Go CI, golangci-lint, govulncheck |
-| `ghcr.io/opus-domini/ci-go-node` | Go CI plus Node and npm |
+| `ghcr.io/opus-domini/ci-go-node` | Go CI, Node/npm and the Docker CLI client |
 | `ghcr.io/opus-domini/ci-go-release` | Go, Node, npm, GoReleaser, Syft, Cosign |
 | `ghcr.io/opus-domini/ci-postgis` | Pinned PostGIS integration-test service |
 | `ghcr.io/opus-domini/ci-redis` | Pinned Redis integration-test service |
@@ -37,4 +37,5 @@ pool. Registry access is not part of job execution.
 
 The four service images are prewarmed only for the dedicated private
 `go-node-services` runtime. Generic runtimes remain unable to reach a container
-engine socket.
+engine socket. The Docker CLI in `ci-go-node` is inert without that private
+runtime's explicitly mounted rootless engine socket.
