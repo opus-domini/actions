@@ -1,0 +1,116 @@
+name: Publish trusted CI runtime images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/runtime-images.yml
+      - images/**
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+concurrency:
+  group: runtime-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.runtime }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: go
+            image: ghcr.io/opus-domini/ci-go
+          - runtime: go-node
+            image: ghcr.io/opus-domini/ci-go-node
+          - runtime: go-release
+            image: ghcr.io/opus-domini/ci-go-release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Resolve reproducible build metadata
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          source images/versions.env
+          epoch="$(git show -s --format=%ct HEAD)"
+          build_date="$(date --utc --date="@${epoch}" +%Y-%m-%dT%H:%M:%SZ)"
+          echo "source_date_epoch=${epoch}" >>"$GITHUB_OUTPUT"
+          echo "build_date=${build_date}" >>"$GITHUB_OUTPUT"
+          echo "tag=sha-${GITHUB_SHA}" >>"$GITHUB_OUTPUT"
+          echo "go_image=${GO_IMAGE}" >>"$GITHUB_OUTPUT"
+          echo "node_image=${NODE_IMAGE}" >>"$GITHUB_OUTPUT"
+          echo "golangci_lint_image=${GOLANGCI_LINT_IMAGE}" >>"$GITHUB_OUTPUT"
+          echo "goreleaser_image=${GORELEASER_IMAGE}" >>"$GITHUB_OUTPUT"
+          echo "syft_image=${SYFT_IMAGE}" >>"$GITHUB_OUTPUT"
+          echo "cosign_image=${COSIGN_IMAGE}" >>"$GITHUB_OUTPUT"
+          echo "govulncheck_version=${GOVULNCHECK_VERSION}" >>"$GITHUB_OUTPUT"
+          echo "npm_version=${NPM_VERSION}" >>"$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and publish immutable image
+        id: image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: images
+          file: images/${{ matrix.runtime }}/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ matrix.image }}:${{ steps.build.outputs.tag }}
+          build-args: |
+            BUILD_DATE=${{ steps.build.outputs.build_date }}
+            COSIGN_IMAGE=${{ steps.build.outputs.cosign_image }}
+            GOLANGCI_LINT_IMAGE=${{ steps.build.outputs.golangci_lint_image }}
+            GORELEASER_IMAGE=${{ steps.build.outputs.goreleaser_image }}
+            GOVULNCHECK_VERSION=${{ steps.build.outputs.govulncheck_version }}
+            GO_IMAGE=${{ steps.build.outputs.go_image }}
+            NODE_IMAGE=${{ steps.build.outputs.node_image }}
+            NPM_VERSION=${{ steps.build.outputs.npm_version }}
+            REVISION=${{ github.sha }}
+            SOURCE_DATE_EPOCH=${{ steps.build.outputs.source_date_epoch }}
+            SYFT_IMAGE=${{ steps.build.outputs.syft_image }}
+            VERSION=${{ steps.build.outputs.tag }}
+          cache-from: type=gha,scope=runtime-${{ matrix.runtime }}
+          cache-to: type=gha,mode=max,scope=runtime-${{ matrix.runtime }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.1
+
+      - name: Sign immutable digest
+        env:
+          IMAGE: ${{ matrix.image }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+          printf '### %s\n\n- digest: `%s`\n- tag: `%s`\n' \
+            "$IMAGE" "$DIGEST" "${{ steps.build.outputs.tag }}" >>"$GITHUB_STEP_SUMMARY"

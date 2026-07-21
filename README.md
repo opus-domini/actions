@@ -34,3 +34,15 @@ The publication job bootstraps release-only tools and invokes the GoReleaser
 action exactly once. CI is not repeated during publication.
 
 All third-party actions are pinned to immutable commit SHAs.
+
+## Trusted runtime images
+
+The reusable trusted workflows consume public OCI runtimes built by this
+repository. The image publisher itself always runs on GitHub-hosted Linux and
+publishes only `linux/amd64` images with provenance, SBOM, and a keyless
+signature over the immutable digest. Version pins and rebuild instructions live
+in [`images/README.md`](images/README.md).
+
+Runtime images contain toolchains only. Listener inventory, cache locations,
+credentials, host paths, trust policy, and the selected image digest remain
+private Ductor configuration and are never published here.

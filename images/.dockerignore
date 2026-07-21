@@ -1,0 +1,7 @@
+**
+!go/Dockerfile
+!go-node/Dockerfile
+!go-release/Dockerfile
+!versions.env
+!docker-bake.hcl
+!README.md
