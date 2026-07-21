@@ -35,7 +35,8 @@ if grep --extended-regexp --quiet \
 fi
 
 for dockerfile in images/go/Dockerfile images/go-node/Dockerfile \
-  images/go-release/Dockerfile; do
+  images/go-release/Dockerfile images/postgis/Dockerfile \
+  images/redis/Dockerfile images/rustfs/Dockerfile images/ryuk/Dockerfile; do
   grep --extended-regexp --quiet '^ARG .+_IMAGE=.+@sha256:[0-9a-f]{64}$' "$dockerfile" \
     || fail "${dockerfile} must pin upstream images by digest"
   if grep --extended-regexp --quiet \
@@ -126,7 +127,7 @@ assert_job_contains "$ci_workflow" full-hosted 'runs-on: ubuntu-latest'
 assert_job_contains "$ci_workflow" full-hosted '- name: Fast CI'
 assert_job_contains "$ci_workflow" full-hosted 'run: make ci-fast'
 assert_job_contains "$ci_workflow" full-trusted 'runs-on: ductor-ci'
-assert_job_contains "$ci_workflow" full-trusted "DUCTOR_RUNTIME: \${{ inputs.frontend && 'go-node' || 'go' }}"
+assert_job_contains "$ci_workflow" full-trusted "DUCTOR_RUNTIME: \${{ inputs.services && 'go-node-services' || (inputs.frontend && 'go-node' || 'go') }}"
 assert_job_contains "$ci_workflow" full-trusted 'run: ductor run --runtime "$DUCTOR_RUNTIME" -- make ci-fast'
 assert_job_contains "$ci_workflow" full-trusted 'run: ductor run --runtime "$DUCTOR_RUNTIME" -- make ci-full'
 for forbidden in 'actions/setup-go@' 'actions/setup-node@' \

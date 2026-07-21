@@ -16,7 +16,8 @@ Pull requests never execute `make ci-full` through the reusable CI workflow.
 GitHub-hosted pull requests remain self-contained: they install the publisher's
 reviewed Go, Node, npm, golangci-lint and govulncheck versions on an isolated
 hosted runner. Trusted jobs only check out the requested revision and call
-`ductor run`; `frontend: true` selects `go-node`, otherwise CI selects `go`.
+`ductor run`; `services: true` selects the private `go-node-services` runtime,
+`frontend: true` selects `go-node`, otherwise CI selects `go`.
 Callers choose behavior and capability, never tool versions or OCI identities.
 
 ## Release contract

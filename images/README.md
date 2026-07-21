@@ -10,6 +10,10 @@ immutable digests, pools, trust domains, mounts, and resource limits.
 | `ghcr.io/opus-domini/ci-go` | Go CI, golangci-lint, govulncheck |
 | `ghcr.io/opus-domini/ci-go-node` | Go CI plus Node and npm |
 | `ghcr.io/opus-domini/ci-go-release` | Go, Node, npm, GoReleaser, Syft, Cosign |
+| `ghcr.io/opus-domini/ci-postgis` | Pinned PostGIS integration-test service |
+| `ghcr.io/opus-domini/ci-redis` | Pinned Redis integration-test service |
+| `ghcr.io/opus-domini/ci-rustfs` | Pinned RustFS integration-test service |
+| `ghcr.io/opus-domini/ci-ryuk` | Pinned Testcontainers resource reaper |
 
 `versions.env` is the reviewed version and upstream-image pin ledger.
 `docker-bake.hcl` is the canonical local build entry point:
@@ -30,3 +34,7 @@ layer/content audit; changing a package to public is treated as irreversible.
 Jobs never select mutable tags. A Ductor catalog update records the emitted
 digest, verifies the keyless identity and attestations, then prewarms a drained
 pool. Registry access is not part of job execution.
+
+The four service images are prewarmed only for the dedicated private
+`go-node-services` runtime. Generic runtimes remain unable to reach a container
+engine socket.

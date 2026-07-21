@@ -18,6 +18,11 @@ on:
         required: false
         type: boolean
         default: false
+      services:
+        description: Select the private service-container runtime
+        required: false
+        type: boolean
+        default: false
       upload-codecov:
         description: Upload coverage to Codecov
         required: false
@@ -105,7 +110,7 @@ jobs:
     runs-on: ductor-ci
     timeout-minutes: ${{ inputs.timeout-minutes }}
     env:
-      DUCTOR_RUNTIME: ${{ inputs.frontend && 'go-node' || 'go' }}
+      DUCTOR_RUNTIME: ${{ inputs.services && 'go-node-services' || (inputs.frontend && 'go-node' || 'go') }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

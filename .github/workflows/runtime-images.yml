@@ -35,6 +35,14 @@ jobs:
             image: ghcr.io/opus-domini/ci-go-node
           - runtime: go-release
             image: ghcr.io/opus-domini/ci-go-release
+          - runtime: postgis
+            image: ghcr.io/opus-domini/ci-postgis
+          - runtime: redis
+            image: ghcr.io/opus-domini/ci-redis
+          - runtime: rustfs
+            image: ghcr.io/opus-domini/ci-rustfs
+          - runtime: ryuk
+            image: ghcr.io/opus-domini/ci-ryuk
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -61,6 +69,10 @@ jobs:
             echo "cosign_image=${COSIGN_IMAGE}"
             echo "govulncheck_version=${GOVULNCHECK_VERSION}"
             echo "npm_version=${NPM_VERSION}"
+            echo "postgis_image=${POSTGIS_IMAGE}"
+            echo "redis_image=${REDIS_IMAGE}"
+            echo "rustfs_image=${RUSTFS_IMAGE}"
+            echo "ryuk_image=${RYUK_IMAGE}"
           } >>"$GITHUB_OUTPUT"
 
       - name: Set up Buildx
@@ -91,7 +103,11 @@ jobs:
             GO_IMAGE=${{ steps.build.outputs.go_image }}
             NODE_IMAGE=${{ steps.build.outputs.node_image }}
             NPM_VERSION=${{ steps.build.outputs.npm_version }}
+            POSTGIS_IMAGE=${{ steps.build.outputs.postgis_image }}
+            REDIS_IMAGE=${{ steps.build.outputs.redis_image }}
             REVISION=${{ github.sha }}
+            RUSTFS_IMAGE=${{ steps.build.outputs.rustfs_image }}
+            RYUK_IMAGE=${{ steps.build.outputs.ryuk_image }}
             SOURCE_DATE_EPOCH=${{ steps.build.outputs.source_date_epoch }}
             SYFT_IMAGE=${{ steps.build.outputs.syft_image }}
             VERSION=${{ steps.build.outputs.tag }}
