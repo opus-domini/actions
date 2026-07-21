@@ -124,14 +124,23 @@ done < <(sed -nE 's/^[[:space:]]*uses:[[:space:]]+([^[:space:]]+).*/\1/p' .githu
 ci_workflow=.github/workflows/ci.yml
 assert_job_contains "$ci_workflow" full-hosted 'runs-on: ubuntu-latest'
 assert_job_contains "$ci_workflow" full-hosted '- name: Fast CI'
-assert_job_contains "$ci_workflow" full-hosted "if: \${{ github.event_name == 'pull_request' }}"
 assert_job_contains "$ci_workflow" full-hosted 'run: make ci-fast'
-assert_job_contains "$ci_workflow" full-hosted '- name: Full CI'
-assert_job_contains "$ci_workflow" full-hosted "if: \${{ github.event_name != 'pull_request' }}"
-assert_job_contains "$ci_workflow" full-hosted 'run: make ci-full'
 assert_job_contains "$ci_workflow" full-trusted 'runs-on: ductor-ci'
+assert_job_contains "$ci_workflow" full-trusted "DUCTOR_RUNTIME: \${{ inputs.frontend && 'go-node' || 'go' }}"
+assert_job_contains "$ci_workflow" full-trusted 'run: ductor run --runtime "$DUCTOR_RUNTIME" -- make ci-fast'
+assert_job_contains "$ci_workflow" full-trusted 'run: ductor run --runtime "$DUCTOR_RUNTIME" -- make ci-full'
+for forbidden in 'actions/setup-go@' 'actions/setup-node@' \
+  'goreleaser/goreleaser-action@' 'ductor-ci bootstrap' 'npm install' 'go install'; do
+  assert_job_excludes "$ci_workflow" full-trusted "$forbidden"
+done
 assert_workflow_contains "$ci_workflow" 'description: Route every pull request to a GitHub-hosted runner'
 assert_workflow_contains "$ci_workflow" "github.event_name != 'pull_request' || github.event.pull_request.base.ref == github.event.repository.default_branch"
+for removed_input in golangci-lint-version govulncheck-version goreleaser \
+  goreleaser-version node-version npm-version; do
+  if grep --extended-regexp --quiet "^[[:space:]]{6}${removed_input}:" "$ci_workflow"; then
+    fail "${ci_workflow} must not expose tool version input ${removed_input}"
+  fi
+done
 
 route_ci() {
   local event_name="$1"
@@ -187,6 +196,11 @@ test "$(route_ci push refs/heads/feature true true true true)" = rejected:none
 vulnerability_workflow=.github/workflows/vulnerability-scan.yml
 assert_workflow_contains "$vulnerability_workflow" \
   "(github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+assert_job_contains "$vulnerability_workflow" vulnerability-scan \
+  'run: ductor run --runtime go -- make vuln'
+for forbidden in 'actions/setup-go@' 'ductor-ci bootstrap' 'go install'; do
+  assert_job_excludes "$vulnerability_workflow" vulnerability-scan "$forbidden"
+done
 
 release_pr_workflow=.github/workflows/release-pr.yml
 assert_job_contains "$release_pr_workflow" classify 'runs-on: ductor-release'
@@ -228,18 +242,22 @@ assert_job_excludes "$publish_workflow" release-gate 'goreleaser/goreleaser-acti
 assert_job_excludes "$publish_workflow" release-gate 'ductor-ci bootstrap'
 
 assert_job_contains "$publish_workflow" goreleaser 'runs-on: ductor-release'
-assert_job_contains "$publish_workflow" goreleaser 'actions/setup-go@'
-assert_job_contains "$publish_workflow" goreleaser 'actions/setup-node@'
-assert_job_contains "$publish_workflow" goreleaser 'run: ductor-ci bootstrap release'
-assert_job_contains "$publish_workflow" goreleaser 'args: release --clean'
+assert_job_contains "$publish_workflow" goreleaser 'ductor run --runtime go-release'
+assert_job_contains "$publish_workflow" goreleaser '--env GITHUB_TOKEN'
+assert_job_contains "$publish_workflow" goreleaser '--env ACTIONS_ID_TOKEN_REQUEST_TOKEN'
+assert_job_contains "$publish_workflow" goreleaser '--env ACTIONS_ID_TOKEN_REQUEST_URL'
+assert_job_contains "$publish_workflow" goreleaser '-- goreleaser release --clean'
 assert_job_excludes "$publish_workflow" goreleaser 'make ci-'
-assert_job_excludes "$publish_workflow" goreleaser 'sigstore/cosign-installer@'
-assert_job_excludes "$publish_workflow" goreleaser 'install-only: true'
+for forbidden in 'actions/setup-go@' 'actions/setup-node@' \
+  'goreleaser/goreleaser-action@' 'sigstore/cosign-installer@' \
+  'ductor-ci bootstrap' 'install-only: true'; do
+  assert_job_excludes "$publish_workflow" goreleaser "$forbidden"
+done
 
 goreleaser_invocations="$(job_block "$publish_workflow" goreleaser \
-  | awk 'index($0, "uses: goreleaser/goreleaser-action@") { count++ } END { print count + 0 }')"
+  | awk 'index($0, "-- goreleaser release --clean") { count++ } END { print count + 0 }')"
 test "$goreleaser_invocations" -eq 1 \
-  || fail 'the publication job must invoke the GoReleaser action exactly once'
+  || fail 'the publication job must invoke GoReleaser exactly once through Ductor'
 
 if grep --fixed-strings --quiet 'run: make ci-' "$publish_workflow"; then
   fail 'release publication must not repeat CI'
@@ -385,19 +403,36 @@ test "$(recovery_target recovery-head recovery-head release-merge true true fals
 
 smoke_workflow=.github/workflows/runner-smoke.yml
 assert_workflow_contains "$smoke_workflow" 'permissions: {}'
-assert_job_contains "$smoke_workflow" ci-runner 'run: ductor-ci bootstrap full'
-assert_job_contains "$smoke_workflow" ci-runner 'test "${DUCTOR_TRUST:-}" = ci'
-assert_job_contains "$smoke_workflow" release-runner 'COSIGN_VERSION: v3.1.1'
-assert_job_contains "$smoke_workflow" release-runner 'run: ductor-ci bootstrap release'
-assert_job_contains "$smoke_workflow" release-runner 'test "${DUCTOR_TRUST:-}" = release'
+assert_job_contains "$smoke_workflow" ci-runner 'ductor image status --pool "$DUCTOR_POOL"'
+assert_job_contains "$smoke_workflow" ci-runner 'ductor run --runtime go-node'
+assert_job_contains "$smoke_workflow" ci-runner 'for executable in goreleaser syft cosign; do'
+assert_job_contains "$smoke_workflow" release-runner 'ductor image status --pool "$DUCTOR_POOL"'
+assert_job_contains "$smoke_workflow" release-runner 'ductor run --runtime go-release'
 assert_job_contains "$smoke_workflow" release-runner 'for executable in golangci-lint govulncheck; do'
 assert_job_excludes "$smoke_workflow" release-runner 'sigstore/cosign-installer@'
-assert_job_excludes "$smoke_workflow" release-runner 'golangci-lint govulncheck syft'
+assert_job_excludes "$smoke_workflow" release-runner 'ductor-ci bootstrap'
 
 if grep --extended-regexp --quiet \
   'actions/checkout|contents:[[:space:]]+write|id-token:|GITHUB_TOKEN|github\.token|run:[[:space:]]+make|/(home|var|run)/|RUNNER_NAME|hostname|docker\.sock' \
   "$smoke_workflow"; then
   fail 'runner smoke must remain checkout-free, read-only, and metadata-free'
+fi
+
+container_smoke_workflow=.github/workflows/container-smoke.yml
+if grep --extended-regexp --quiet \
+  '^[[:space:]]{6}profile:|DUCTOR_PROFILE|ductor-profile-' \
+  "$container_smoke_workflow"; then
+  fail 'container smoke must not expose the removed profile contract'
+fi
+assert_job_contains "$container_smoke_workflow" slot \
+  'ductor image status --pool "$EXPECTED_POOL"'
+
+if grep --fixed-strings --quiet 'ductor-ci bootstrap' "${workflows[@]}"; then
+  fail 'trusted workflows must not invoke the removed ductor-ci bootstrap path'
+fi
+if grep --fixed-strings --quiet 'ductor-profile-' README.md "${workflows[@]}" \
+  "$container_smoke_workflow"; then
+  fail 'public workflows must not expose removed profile labels'
 fi
 
 grep --fixed-strings --quiet '    - ductor-ci' .github/actionlint.yaml \

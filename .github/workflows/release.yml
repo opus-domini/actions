@@ -3,26 +3,6 @@ name: Reusable release publication
 on:
   workflow_call:
     inputs:
-      frontend:
-        description: Set up Node and npm for repositories with a frontend
-        required: false
-        type: boolean
-        default: false
-      goreleaser-version:
-        description: GoReleaser version used by repository Make targets
-        required: false
-        type: string
-        default: v2.17.0
-      node-version:
-        description: Node major or exact version for frontend repositories
-        required: false
-        type: string
-        default: "26"
-      npm-version:
-        description: npm version for frontend repositories
-        required: false
-        type: string
-        default: 12.0.1
       release-please-config:
         description: Release Please configuration
         required: false
@@ -335,12 +315,6 @@ jobs:
     permissions:
       contents: write
       id-token: write
-    env:
-      GORELEASER_VERSION: ${{ inputs.goreleaser-version }}
-      NPM_VERSION: ${{ inputs.npm-version }}
-      DUCTOR_FRONTEND: ${{ inputs.frontend }}
-      COSIGN_VERSION: v3.1.1
-      SYFT_VERSION: v1.46.0
     steps:
       - name: Checkout release tag
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -349,26 +323,16 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: Set up Node
-        if: ${{ inputs.frontend }}
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: ${{ inputs.node-version }}
-          package-manager-cache: false
-
-      - name: Bootstrap tools
-        run: ductor-ci bootstrap release
-
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
-        with:
-          version: ${{ env.GORELEASER_VERSION }}
-          args: release --clean
+      - name: Run GoReleaser in trusted runtime
+        run: >-
+          ductor run --runtime go-release
+          --env GITHUB_TOKEN
+          --env GITHUB_REPOSITORY
+          --env GITHUB_REF
+          --env GITHUB_REF_NAME
+          --env GITHUB_SHA
+          --env ACTIONS_ID_TOKEN_REQUEST_TOKEN
+          --env ACTIONS_ID_TOKEN_REQUEST_URL
+          -- goreleaser release --clean
         env:
           GITHUB_TOKEN: ${{ github.token }}

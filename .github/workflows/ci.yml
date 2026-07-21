@@ -4,12 +4,12 @@ on:
   workflow_call:
     inputs:
       frontend:
-        description: Set up Node and npm for repositories with a frontend
+        description: Select the Go and Node trusted runtime
         required: false
         type: boolean
         default: false
       frontend-lockfile:
-        description: Frontend lockfile
+        description: Frontend lockfile used by the hosted npm cache
         required: false
         type: string
         default: frontend/package-lock.json
@@ -18,43 +18,13 @@ on:
         required: false
         type: boolean
         default: false
-      golangci-lint-version:
-        description: golangci-lint version used by the repository Make targets
-        required: false
-        type: string
-        default: v2.12.2
-      govulncheck-version:
-        description: govulncheck version used by the repository Make targets
-        required: false
-        type: string
-        default: v1.6.0
-      goreleaser:
-        description: Set up GoReleaser for repositories that validate release configuration in CI
-        required: false
-        type: boolean
-        default: false
-      goreleaser-version:
-        description: GoReleaser version used by repository Make targets
-        required: false
-        type: string
-        default: v2.17.0
-      node-version:
-        description: Node major or exact version for frontend repositories
-        required: false
-        type: string
-        default: "26"
-      npm-version:
-        description: npm version for frontend repositories
-        required: false
-        type: string
-        default: 12.0.1
       upload-codecov:
         description: Upload coverage to Codecov
         required: false
         type: boolean
         default: false
       timeout-minutes:
-        description: Full CI job timeout
+        description: CI job timeout
         required: false
         type: number
         default: 30
@@ -75,12 +45,12 @@ jobs:
     if: ${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    env: &ci-env
-      GOLANGCI_LINT_VERSION: ${{ inputs.golangci-lint-version }}
-      GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
-      NPM_VERSION: ${{ inputs.npm-version }}
+    env:
       DUCTOR_FRONTEND: ${{ inputs.frontend }}
-    steps: &ci-steps
+      GOLANGCI_LINT_VERSION: v2.12.2
+      GOVULNCHECK_VERSION: v1.6.0
+      NPM_VERSION: 12.0.1
+    steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -90,30 +60,18 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: ${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
+          cache: true
 
       - name: Set up Node
         if: ${{ inputs.frontend }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ inputs.node-version }}
+          node-version: "26"
           package-manager-cache: false
-          cache: ${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) && 'npm' || '' }}
+          cache: npm
           cache-dependency-path: ${{ inputs.frontend-lockfile }}
 
-      - name: Set up GoReleaser
-        if: ${{ inputs.goreleaser }}
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
-        with:
-          version: ${{ inputs.goreleaser-version }}
-          install-only: true
-
-      - name: Bootstrap tools
-        if: ${{ github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository) }}
-        run: ductor-ci bootstrap full
-
-      - name: Bootstrap hosted tools
-        if: ${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
+      - name: Install hosted CI tools
         shell: bash
         run: |
           set -euo pipefail
@@ -132,12 +90,7 @@ jobs:
           fi
 
       - name: Fast CI
-        if: ${{ github.event_name == 'pull_request' }}
         run: make ci-fast
-
-      - name: Full CI
-        if: ${{ github.event_name != 'pull_request' }}
-        run: make ci-full
 
       - name: Upload coverage to Codecov
         if: ${{ inputs.upload-codecov }}
@@ -151,5 +104,26 @@ jobs:
     if: ${{ (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || github.event.pull_request.base.ref == github.event.repository.default_branch) && (github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ductor-ci
     timeout-minutes: ${{ inputs.timeout-minutes }}
-    env: *ci-env
-    steps: *ci-steps
+    env:
+      DUCTOR_RUNTIME: ${{ inputs.frontend && 'go-node' || 'go' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Fast CI in trusted runtime
+        if: ${{ github.event_name == 'pull_request' }}
+        run: ductor run --runtime "$DUCTOR_RUNTIME" -- make ci-fast
+
+      - name: Full CI in trusted runtime
+        if: ${{ github.event_name != 'pull_request' }}
+        run: ductor run --runtime "$DUCTOR_RUNTIME" -- make ci-full
+
+      - name: Upload coverage to Codecov
+        if: ${{ inputs.upload-codecov }}
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          token: ${{ secrets.codecov-token }}
+          fail_ci_if_error: false
+          version: v11.3.1

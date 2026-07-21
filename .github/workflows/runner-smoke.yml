@@ -16,79 +16,38 @@ concurrency:
   group: runner-smoke-${{ github.repository }}
   cancel-in-progress: false
 
-env:
-  GOLANGCI_LINT_VERSION: v2.12.2
-  GOVULNCHECK_VERSION: v1.6.0
-  NPM_VERSION: 12.0.1
-  DUCTOR_FRONTEND: true
-
 jobs:
   ci-runner:
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ductor-ci
     timeout-minutes: 20
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: 1.26.5
-          cache: false
-
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "26"
-          package-manager-cache: false
-
-      - name: Bootstrap CI tools
-        run: ductor-ci bootstrap full
-
-      - name: Verify CI runner
-        shell: bash
+      - name: Verify CI runtime capacity
         run: |
-          set -euo pipefail
-
-          test "${DUCTOR_TRUST:-}" = ci
-          for executable in go node npm golangci-lint govulncheck ductor-ci; do
-            command -v "$executable" >/dev/null
-          done
+          ductor image status --pool "$DUCTOR_POOL"
+          ductor run --runtime go-node -- sh -euc '
+            for executable in go node npm golangci-lint govulncheck; do
+              command -v "$executable" >/dev/null
+            done
+            for executable in goreleaser syft cosign; do
+              ! command -v "$executable" >/dev/null
+            done
+          '
 
   release-runner:
     needs: ci-runner
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ductor-release
     timeout-minutes: 20
-    env:
-      COSIGN_VERSION: v3.1.1
-      SYFT_VERSION: v1.46.0
     steps:
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: 1.26.5
-          cache: false
-
-      - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: "26"
-          package-manager-cache: false
-
-      - name: Bootstrap release tools
-        run: ductor-ci bootstrap release
-
-      - name: Verify release runner
-        shell: bash
+      - name: Verify release runtime capacity
         run: |
-          set -euo pipefail
-
-          test "${DUCTOR_TRUST:-}" = release
-          for executable in go node npm syft cosign ductor-ci; do
-            command -v "$executable" >/dev/null
-          done
-          for executable in golangci-lint govulncheck; do
-            if command -v "$executable" >/dev/null; then
-              echo "::error title=Unexpected CI tool::${executable} is available in release scope."
-              exit 1
-            fi
-          done
+          ductor image status --pool "$DUCTOR_POOL"
+          ductor run --runtime go-release -- sh -euc '
+            for executable in go node npm goreleaser syft cosign; do
+              command -v "$executable" >/dev/null
+            done
+            for executable in golangci-lint govulncheck; do
+              ! command -v "$executable" >/dev/null
+            done
+          '

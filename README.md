@@ -7,12 +7,17 @@ Public reusable workflows for Opus Domini repositories.
 | Caller event | Accepted target | Execution | CI target |
 | --- | --- | --- | --- |
 | Pull request | Branch accepted by the caller | Hosted for public, fork, or explicitly hosted workloads; trusted otherwise | `make ci-fast` |
-| Push | Default branch | Trusted | `make ci-full` |
-| Schedule | Default branch | Trusted | `make ci-full` |
-| Manual dispatch | Default branch | Trusted | `make ci-full` |
+| Push | Default branch | Trusted `go` or `go-node` runtime | `make ci-full` |
+| Schedule | Default branch | Trusted `go` or `go-node` runtime | `make ci-full` |
+| Manual dispatch | Default branch | Trusted `go` or `go-node` runtime | `make ci-full` |
 
 Push, schedule, and manual dispatch are accepted only on the default branch.
 Pull requests never execute `make ci-full` through the reusable CI workflow.
+GitHub-hosted pull requests remain self-contained: they install the publisher's
+reviewed Go, Node, npm, golangci-lint and govulncheck versions on an isolated
+hosted runner. Trusted jobs only check out the requested revision and call
+`ductor run`; `frontend: true` selects `go-node`, otherwise CI selects `go`.
+Callers choose behavior and capability, never tool versions or OCI identities.
 
 ## Release contract
 
@@ -30,8 +35,10 @@ checks the target and waits up to 30 minutes for its exact reusable CI push run 
 successfully. A stale recovery request or a missing, failed, cancelled,
 mismatched, or timed-out CI run blocks publication.
 
-The publication job bootstraps release-only tools and invokes the GoReleaser
-action exactly once. CI is not repeated during publication.
+The publication job executes `goreleaser release --clean` exactly once inside
+the signed `go-release` runtime. Only the GitHub token, repository/ref context
+and OIDC request variables are forwarded by name. CI is not repeated during
+publication.
 
 All third-party actions are pinned to immutable commit SHAs.
 
@@ -46,3 +53,9 @@ in [`images/README.md`](images/README.md).
 Runtime images contain toolchains only. Listener inventory, cache locations,
 credentials, host paths, trust policy, and the selected image digest remain
 private Ductor configuration and are never published here.
+
+Tags are discovery outputs, not execution identity. Ductor verifies each
+publisher's exact OIDC workflow identity, provenance and SBOM, pulls the digest
+only while a pool is drained, and records a local ready image. Job execution is
+strictly no-pull: a missing or divergent local digest fails before the project
+command starts.

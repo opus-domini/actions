@@ -13,10 +13,6 @@ on:
         description: Expected runner pool advertised by every slot
         required: true
         type: string
-      profile:
-        description: Expected runner profile advertised by every slot
-        required: true
-        type: string
       runner_prefix:
         description: Per-slot runner label prefix supplied by the caller
         required: true
@@ -50,7 +46,6 @@ jobs:
         shell: bash
         env:
           EXPECTED_POOL: ${{ inputs.pool }}
-          EXPECTED_PROFILE: ${{ inputs.profile }}
           EXPECTED_RUNNER: ${{ inputs.runner_prefix }}${{ matrix.slot }}
           EXPECTED_SLOT: ${{ matrix.slot }}
           INSTALL_ID: ${{ inputs.install_id }}
@@ -67,7 +62,6 @@ jobs:
           [[ "$RUNNER_OS" == 'Linux' ]]
           [[ "$RUNNER_ARCH" == 'X64' ]]
           [[ "$DUCTOR_POOL" == "$EXPECTED_POOL" ]]
-          [[ "$DUCTOR_PROFILE" == "$EXPECTED_PROFILE" ]]
           [[ "$RUNNER_NAME" == "$EXPECTED_RUNNER" ]]
 
           [[ "${DUCTOR_CACHE_ROOT:-}" == /* ]]
@@ -78,6 +72,8 @@ jobs:
           [[ -w "$DUCTOR_LEASE_DIR" ]]
           [[ "$DUCTOR_CONTAINER_UID" == '0' ]]
           [[ "$DUCTOR_CONTAINER_GID" == '0' ]]
+
+          ductor image status --pool "$EXPECTED_POOL"
 
           engine_contract="$(docker info \
             --format '{{json .SecurityOptions}}|{{.CgroupDriver}}|{{.CgroupVersion}}')"
