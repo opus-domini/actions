@@ -25,6 +25,7 @@ jobs:
       - name: Verify CI runtime capacity
         run: |
           ductor image status --pool "$DUCTOR_POOL"
+          # shellcheck disable=SC2016
           ductor run --runtime go-node -- sh -euc '
             for executable in go node npm golangci-lint govulncheck; do
               command -v "$executable" >/dev/null
@@ -43,6 +44,7 @@ jobs:
       - name: Verify release runtime capacity
         run: |
           ductor image status --pool "$DUCTOR_POOL"
+          # shellcheck disable=SC2016
           ductor run --runtime go-release -- sh -euc '
             for executable in go node npm goreleaser syft cosign; do
               command -v "$executable" >/dev/null

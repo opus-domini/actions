@@ -49,17 +49,19 @@ jobs:
           source images/versions.env
           epoch="$(git show -s --format=%ct HEAD)"
           build_date="$(date --utc --date="@${epoch}" +%Y-%m-%dT%H:%M:%SZ)"
-          echo "source_date_epoch=${epoch}" >>"$GITHUB_OUTPUT"
-          echo "build_date=${build_date}" >>"$GITHUB_OUTPUT"
-          echo "tag=sha-${GITHUB_SHA}" >>"$GITHUB_OUTPUT"
-          echo "go_image=${GO_IMAGE}" >>"$GITHUB_OUTPUT"
-          echo "node_image=${NODE_IMAGE}" >>"$GITHUB_OUTPUT"
-          echo "golangci_lint_image=${GOLANGCI_LINT_IMAGE}" >>"$GITHUB_OUTPUT"
-          echo "goreleaser_image=${GORELEASER_IMAGE}" >>"$GITHUB_OUTPUT"
-          echo "syft_image=${SYFT_IMAGE}" >>"$GITHUB_OUTPUT"
-          echo "cosign_image=${COSIGN_IMAGE}" >>"$GITHUB_OUTPUT"
-          echo "govulncheck_version=${GOVULNCHECK_VERSION}" >>"$GITHUB_OUTPUT"
-          echo "npm_version=${NPM_VERSION}" >>"$GITHUB_OUTPUT"
+          {
+            echo "source_date_epoch=${epoch}"
+            echo "build_date=${build_date}"
+            echo "tag=sha-${GITHUB_SHA}"
+            echo "go_image=${GO_IMAGE}"
+            echo "node_image=${NODE_IMAGE}"
+            echo "golangci_lint_image=${GOLANGCI_LINT_IMAGE}"
+            echo "goreleaser_image=${GORELEASER_IMAGE}"
+            echo "syft_image=${SYFT_IMAGE}"
+            echo "cosign_image=${COSIGN_IMAGE}"
+            echo "govulncheck_version=${GOVULNCHECK_VERSION}"
+            echo "npm_version=${NPM_VERSION}"
+          } >>"$GITHUB_OUTPUT"
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
@@ -112,5 +114,5 @@ jobs:
           set -euo pipefail
           [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           cosign sign --yes "${IMAGE}@${DIGEST}"
-          printf '### %s\n\n- digest: `%s`\n- tag: `%s`\n' \
+          printf '### %s\n\n- digest: %s\n- tag: %s\n' \
             "$IMAGE" "$DIGEST" "${{ steps.build.outputs.tag }}" >>"$GITHUB_STEP_SUMMARY"
