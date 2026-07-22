@@ -252,6 +252,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Create GitHub release
+        if: ${{ github.event_name == 'pull_request' }}
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
@@ -262,6 +263,7 @@ jobs:
           skip-github-pull-request: true
 
       - name: Validate Release Please output
+        if: ${{ github.event_name == 'pull_request' }}
         env:
           ACTION_RELEASE_CREATED: ${{ steps.release.outputs.release_created }}
           ACTION_TAG_NAME: ${{ steps.release.outputs.tag_name }}

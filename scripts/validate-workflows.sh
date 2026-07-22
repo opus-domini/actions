@@ -243,6 +243,13 @@ assert_job_excludes "$publish_workflow" release-gate 'actions/setup-node@'
 assert_job_excludes "$publish_workflow" release-gate 'goreleaser/goreleaser-action@'
 assert_job_excludes "$publish_workflow" release-gate 'ductor-ci bootstrap'
 
+assert_job_contains "$publish_workflow" release-please \
+  "if: \${{ github.event_name == 'pull_request' }}"
+assert_job_contains "$publish_workflow" release-please \
+  'repos/$GITHUB_REPOSITORY/releases/tags/$EXPECTED_TAG_NAME'
+assert_job_contains "$publish_workflow" release-please \
+  '[[ "$tag_commit" != "$RELEASE_SHA" ]]'
+
 assert_job_contains "$publish_workflow" goreleaser 'runs-on: ductor-release'
 assert_job_contains "$publish_workflow" goreleaser 'ductor run --runtime go-release'
 assert_job_contains "$publish_workflow" goreleaser '--env GITHUB_TOKEN'
