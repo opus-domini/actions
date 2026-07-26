@@ -23,6 +23,11 @@ jobs:
     if: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ductor-release
     timeout-minutes: 5
+    container:
+      image: ductor.invalid/runtime/go-release:v1
+      env:
+        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: "300"
     permissions:
       contents: read
     outputs:
@@ -59,6 +64,11 @@ jobs:
     if: ${{ needs.classify.outputs.manifest_changed == 'false' }}
     runs-on: ductor-release
     timeout-minutes: 10
+    container:
+      image: ductor.invalid/runtime/go-release:v1
+      env:
+        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: "600"
     permissions:
       contents: write
       issues: write

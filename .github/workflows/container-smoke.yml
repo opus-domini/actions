@@ -25,6 +25,10 @@ on:
         description: JSON array of runs-on labels with {0} as the slot placeholder
         required: true
         type: string
+      runtime:
+        description: Exact logical Ductor runtime exercised by every slot
+        required: true
+        type: string
 
 permissions: {}
 
@@ -41,6 +45,11 @@ jobs:
         slot: ${{ fromJSON(inputs.slots) }}
     runs-on: ${{ fromJSON(format(inputs.runs_on_template, matrix.slot)) }}
     timeout-minutes: 5
+    container:
+      image: ${{ format('ductor.invalid/runtime/{0}:v1', inputs.runtime) }}
+      env:
+        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: "300"
     steps:
       - name: Verify container runner contract
         shell: bash

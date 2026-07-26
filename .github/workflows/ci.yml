@@ -28,11 +28,6 @@ on:
         required: false
         type: boolean
         default: false
-      timeout-minutes:
-        description: CI job timeout
-        required: false
-        type: number
-        default: 30
     secrets:
       codecov-token:
         description: Optional Codecov upload token
@@ -49,7 +44,7 @@ jobs:
   full-hosted:
     if: ${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ inputs.timeout-minutes }}
+    timeout-minutes: 30
     env:
       DUCTOR_FRONTEND: ${{ inputs.frontend }}
       GOLANGCI_LINT_VERSION: v2.12.2
@@ -108,22 +103,25 @@ jobs:
   full-trusted:
     if: ${{ (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || github.event.pull_request.base.ref == github.event.repository.default_branch) && (github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ductor-ci
-    timeout-minutes: ${{ inputs.timeout-minutes }}
-    env:
-      DUCTOR_RUNTIME: ${{ inputs.services && 'go-node-services' || (inputs.frontend && 'go-node' || 'go') }}
+    timeout-minutes: 30
+    container:
+      image: ${{ format('ductor.invalid/runtime/{0}:v1', inputs.services && 'go-node-services' || (inputs.frontend && 'go-node' || 'go')) }}
+      env:
+        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: "1800"
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - name: Fast CI in trusted runtime
+      - name: Fast CI
         if: ${{ github.event_name == 'pull_request' }}
-        run: ductor run --runtime "$DUCTOR_RUNTIME" -- make ci-fast
+        run: make ci-fast
 
-      - name: Full CI in trusted runtime
+      - name: Full CI
         if: ${{ github.event_name != 'pull_request' }}
-        run: ductor run --runtime "$DUCTOR_RUNTIME" -- make ci-full
+        run: make ci-full
 
       - name: Upload coverage to Codecov
         if: ${{ inputs.upload-codecov }}

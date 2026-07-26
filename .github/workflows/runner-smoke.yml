@@ -26,29 +26,27 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ductor-ci
     timeout-minutes: 20
-    env:
-      DUCTOR_RUNTIME: ${{ inputs.services && 'go-node-services' || 'go-node' }}
+    container:
+      image: ${{ format('ductor.invalid/runtime/{0}:v1', inputs.services && 'go-node-services' || 'go-node') }}
+      env:
+        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: "1200"
     steps:
       - name: Verify CI runtime capacity
         run: |
           ductor image status --pool "$DUCTOR_POOL"
-          # shellcheck disable=SC2016
-          ductor run --runtime "$DUCTOR_RUNTIME" -- sh -euc '
-            for executable in go node npm golangci-lint govulncheck; do
-              command -v "$executable" >/dev/null
-            done
-            for executable in goreleaser syft cosign; do
-              ! command -v "$executable" >/dev/null
-            done
-          '
-          if [[ "$DUCTOR_RUNTIME" == go-node-services ]]; then
-            # shellcheck disable=SC2016
-            ductor run --runtime "$DUCTOR_RUNTIME" -- sh -euc \
-              'socket_path="${DOCKER_HOST#unix://}"; test "$socket_path" != "$DOCKER_HOST"; test -S "$socket_path"'
+          for executable in go node npm golangci-lint govulncheck; do
+            command -v "$executable" >/dev/null
+          done
+          for executable in goreleaser syft cosign; do
+            ! command -v "$executable" >/dev/null
+          done
+          if [[ "${{ inputs.services }}" == true ]]; then
+            socket_path="${DOCKER_HOST#unix://}"
+            [[ "$socket_path" != "$DOCKER_HOST" ]]
+            [[ -S "$socket_path" ]]
           else
-            # shellcheck disable=SC2016
-            ductor run --runtime "$DUCTOR_RUNTIME" -- sh -euc \
-              'test -z "${DOCKER_HOST:-}"'
+            [[ -z "${DOCKER_HOST:-}" ]]
           fi
 
   release-runner:
@@ -56,16 +54,18 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ductor-release
     timeout-minutes: 20
+    container:
+      image: ductor.invalid/runtime/go-release:v1
+      env:
+        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: "1200"
     steps:
       - name: Verify release runtime capacity
         run: |
           ductor image status --pool "$DUCTOR_POOL"
-          # shellcheck disable=SC2016
-          ductor run --runtime go-release -- sh -euc '
-            for executable in go node npm goreleaser syft cosign; do
-              command -v "$executable" >/dev/null
-            done
-            for executable in golangci-lint govulncheck; do
-              ! command -v "$executable" >/dev/null
-            done
-          '
+          for executable in go node npm goreleaser syft cosign; do
+            command -v "$executable" >/dev/null
+          done
+          for executable in golangci-lint govulncheck; do
+            ! command -v "$executable" >/dev/null
+          done

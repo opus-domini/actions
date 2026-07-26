@@ -35,6 +35,12 @@ Jobs never select mutable tags. A Ductor catalog update records the emitted
 digest, verifies the keyless identity and attestations, then prewarms a drained
 pool. Registry access is not part of job execution.
 
+Trusted reusable workflows declare only logical
+`ductor.invalid/runtime/<id>:v1` job-container markers. Those markers are not
+registry references: the private runner hook resolves them through Ductor's
+closed runtime/pool/trust catalog and starts the already prewarmed digest.
+Workflow steps execute directly inside that sandbox.
+
 The four service images are prewarmed only for the dedicated private
 `go-node-services` runtime. Generic runtimes remain unable to reach a container
 engine socket. The Docker CLI in `ci-go-node` is inert without that private

@@ -4,6 +4,16 @@ set -euo pipefail
 
 workflows=(
   .github/workflows/ci.yml
+  .github/workflows/container-smoke.yml
+  .github/workflows/vulnerability-scan.yml
+  .github/workflows/release-pr.yml
+  .github/workflows/release.yml
+  .github/workflows/runner-smoke.yml
+  .github/workflows/runtime-images.yml
+)
+
+metadata_workflows=(
+  .github/workflows/ci.yml
   .github/workflows/vulnerability-scan.yml
   .github/workflows/release-pr.yml
   .github/workflows/release.yml
@@ -95,6 +105,20 @@ assert_workflow_contains() {
     || fail "${workflow} must contain: ${expected}"
 }
 
+assert_container_contract() {
+  local workflow="$1"
+  local job="$2"
+  local image="$3"
+  local minutes="$4"
+  local seconds="$5"
+
+  assert_job_contains "$workflow" "$job" "timeout-minutes: ${minutes}"
+  assert_job_contains "$workflow" "$job" 'container:'
+  assert_job_contains "$workflow" "$job" "image: ${image}"
+  assert_job_contains "$workflow" "$job" 'HOME: /github/home'
+  assert_job_contains "$workflow" "$job" "DUCTOR_JOB_TIMEOUT_SECONDS: \"${seconds}\""
+}
+
 if grep --fixed-strings --quiet 'github.repository_owner' "${workflows[@]}"; then
   fail 'workflows must not route by repository owner'
 fi
@@ -105,7 +129,7 @@ if grep --extended-regexp --quiet \
 fi
 if grep --extended-regexp --quiet \
   'RUNNER_NAME|hostname|[0-9]{1,3}(\.[0-9]{1,3}){3}|/(home|var|etc|opt|srv|run|tmp)/' \
-  README.md "${workflows[@]}"; then
+  README.md "${metadata_workflows[@]}"; then
   fail 'public files must not expose host metadata'
 fi
 if grep --extended-regexp --quiet \
@@ -127,18 +151,23 @@ ci_workflow=.github/workflows/ci.yml
 assert_job_contains "$ci_workflow" full-hosted 'runs-on: ubuntu-latest'
 assert_job_contains "$ci_workflow" full-hosted '- name: Fast CI'
 assert_job_contains "$ci_workflow" full-hosted 'run: make ci-fast'
+assert_job_excludes "$ci_workflow" full-hosted 'ductor.invalid/runtime/'
+assert_job_excludes "$ci_workflow" full-hosted 'DUCTOR_JOB_TIMEOUT_SECONDS'
 assert_job_contains "$ci_workflow" full-trusted 'runs-on: ductor-ci'
-assert_job_contains "$ci_workflow" full-trusted "DUCTOR_RUNTIME: \${{ inputs.services && 'go-node-services' || (inputs.frontend && 'go-node' || 'go') }}"
-assert_job_contains "$ci_workflow" full-trusted 'run: ductor run --runtime "$DUCTOR_RUNTIME" -- make ci-fast'
-assert_job_contains "$ci_workflow" full-trusted 'run: ductor run --runtime "$DUCTOR_RUNTIME" -- make ci-full'
+assert_container_contract "$ci_workflow" full-trusted \
+  "\${{ format('ductor.invalid/runtime/{0}:v1', inputs.services && 'go-node-services' || (inputs.frontend && 'go-node' || 'go')) }}" \
+  30 1800
+assert_job_contains "$ci_workflow" full-trusted 'run: make ci-fast'
+assert_job_contains "$ci_workflow" full-trusted 'run: make ci-full'
 for forbidden in 'actions/setup-go@' 'actions/setup-node@' \
-  'goreleaser/goreleaser-action@' 'ductor-ci bootstrap' 'npm install' 'go install'; do
+  'goreleaser/goreleaser-action@' 'ductor-ci bootstrap' 'npm install' 'go install' \
+  'ductor run'; do
   assert_job_excludes "$ci_workflow" full-trusted "$forbidden"
 done
 assert_workflow_contains "$ci_workflow" 'description: Route every pull request to a GitHub-hosted runner'
 assert_workflow_contains "$ci_workflow" "github.event_name != 'pull_request' || github.event.pull_request.base.ref == github.event.repository.default_branch"
 for removed_input in golangci-lint-version govulncheck-version goreleaser \
-  goreleaser-version node-version npm-version; do
+  goreleaser-version node-version npm-version timeout-minutes; do
   if grep --extended-regexp --quiet "^[[:space:]]{6}${removed_input}:" "$ci_workflow"; then
     fail "${ci_workflow} must not expose tool version input ${removed_input}"
   fi
@@ -198,9 +227,11 @@ test "$(route_ci push refs/heads/feature true true true true)" = rejected:none
 vulnerability_workflow=.github/workflows/vulnerability-scan.yml
 assert_workflow_contains "$vulnerability_workflow" \
   "(github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
+assert_container_contract "$vulnerability_workflow" vulnerability-scan \
+  'ductor.invalid/runtime/go:v1' 15 900
 assert_job_contains "$vulnerability_workflow" vulnerability-scan \
-  'run: ductor run --runtime go -- make vuln'
-for forbidden in 'actions/setup-go@' 'ductor-ci bootstrap' 'go install'; do
+  'run: make vuln'
+for forbidden in 'actions/setup-go@' 'ductor-ci bootstrap' 'go install' 'ductor run'; do
   assert_job_excludes "$vulnerability_workflow" vulnerability-scan "$forbidden"
 done
 
@@ -208,14 +239,20 @@ release_pr_workflow=.github/workflows/release-pr.yml
 assert_job_contains "$release_pr_workflow" classify 'runs-on: ductor-release'
 assert_job_contains "$release_pr_workflow" classify 'permissions:'
 assert_job_contains "$release_pr_workflow" classify 'contents: read'
+assert_container_contract "$release_pr_workflow" classify \
+  'ductor.invalid/runtime/go-release:v1' 5 300
 assert_job_contains "$release_pr_workflow" release-please-pr 'runs-on: ductor-release'
 assert_job_contains "$release_pr_workflow" release-please-pr 'contents: write'
 assert_job_contains "$release_pr_workflow" release-please-pr 'skip-github-release: true'
+assert_container_contract "$release_pr_workflow" release-please-pr \
+  'ductor.invalid/runtime/go-release:v1' 10 600
 assert_job_excludes "$release_pr_workflow" classify 'contents: write'
 
 publish_workflow=.github/workflows/release.yml
 assert_workflow_contains "$publish_workflow" 'recovery_release_sha:'
 assert_job_contains "$publish_workflow" release-gate 'runs-on: ductor-release'
+assert_container_contract "$publish_workflow" release-gate \
+  'ductor.invalid/runtime/go-release:v1' 35 2100
 assert_job_contains "$publish_workflow" release-gate 'actions: read'
 assert_job_contains "$publish_workflow" release-gate 'contents: read'
 assert_job_contains "$publish_workflow" release-gate 'github.event_name == '\''workflow_dispatch'\'''
@@ -245,28 +282,28 @@ assert_job_excludes "$publish_workflow" release-gate 'ductor-ci bootstrap'
 
 assert_job_contains "$publish_workflow" release-please \
   "if: \${{ github.event_name == 'pull_request' }}"
+assert_container_contract "$publish_workflow" release-please \
+  'ductor.invalid/runtime/go-release:v1' 10 600
 assert_job_contains "$publish_workflow" release-please \
   'repos/$GITHUB_REPOSITORY/releases/tags/$EXPECTED_TAG_NAME'
 assert_job_contains "$publish_workflow" release-please \
   '[[ "$tag_commit" != "$RELEASE_SHA" ]]'
 
 assert_job_contains "$publish_workflow" goreleaser 'runs-on: ductor-release'
-assert_job_contains "$publish_workflow" goreleaser 'ductor run --runtime go-release'
-assert_job_contains "$publish_workflow" goreleaser '--env GITHUB_TOKEN'
-assert_job_contains "$publish_workflow" goreleaser '--env ACTIONS_ID_TOKEN_REQUEST_TOKEN'
-assert_job_contains "$publish_workflow" goreleaser '--env ACTIONS_ID_TOKEN_REQUEST_URL'
-assert_job_contains "$publish_workflow" goreleaser '-- goreleaser release --clean'
+assert_container_contract "$publish_workflow" goreleaser \
+  'ductor.invalid/runtime/go-release:v1' 60 3600
+assert_job_contains "$publish_workflow" goreleaser 'run: goreleaser release --clean'
 assert_job_excludes "$publish_workflow" goreleaser 'make ci-'
 for forbidden in 'actions/setup-go@' 'actions/setup-node@' \
   'goreleaser/goreleaser-action@' 'sigstore/cosign-installer@' \
-  'ductor-ci bootstrap' 'install-only: true'; do
+  'ductor-ci bootstrap' 'install-only: true' 'ductor run'; do
   assert_job_excludes "$publish_workflow" goreleaser "$forbidden"
 done
 
 goreleaser_invocations="$(job_block "$publish_workflow" goreleaser \
-  | awk 'index($0, "-- goreleaser release --clean") { count++ } END { print count + 0 }')"
+  | awk 'index($0, "run: goreleaser release --clean") { count++ } END { print count + 0 }')"
 test "$goreleaser_invocations" -eq 1 \
-  || fail 'the publication job must invoke GoReleaser exactly once through Ductor'
+  || fail 'the publication job must invoke GoReleaser exactly once inside its job container'
 
 if grep --fixed-strings --quiet 'run: make ci-' "$publish_workflow"; then
   fail 'release publication must not repeat CI'
@@ -413,12 +450,14 @@ test "$(recovery_target recovery-head recovery-head release-merge true true fals
 smoke_workflow=.github/workflows/runner-smoke.yml
 assert_workflow_contains "$smoke_workflow" 'permissions: {}'
 assert_job_contains "$smoke_workflow" ci-runner 'ductor image status --pool "$DUCTOR_POOL"'
-assert_job_contains "$smoke_workflow" ci-runner "DUCTOR_RUNTIME: \${{ inputs.services && 'go-node-services' || 'go-node' }}"
-assert_job_contains "$smoke_workflow" ci-runner 'ductor run --runtime "$DUCTOR_RUNTIME"'
+assert_container_contract "$smoke_workflow" ci-runner \
+  "\${{ format('ductor.invalid/runtime/{0}:v1', inputs.services && 'go-node-services' || 'go-node') }}" \
+  20 1200
 assert_job_contains "$smoke_workflow" ci-runner 'socket_path="${DOCKER_HOST#unix://}"'
 assert_job_contains "$smoke_workflow" ci-runner 'for executable in goreleaser syft cosign; do'
 assert_job_contains "$smoke_workflow" release-runner 'ductor image status --pool "$DUCTOR_POOL"'
-assert_job_contains "$smoke_workflow" release-runner 'ductor run --runtime go-release'
+assert_container_contract "$smoke_workflow" release-runner \
+  'ductor.invalid/runtime/go-release:v1' 20 1200
 assert_job_contains "$smoke_workflow" release-runner 'for executable in golangci-lint govulncheck; do'
 assert_job_excludes "$smoke_workflow" release-runner 'sigstore/cosign-installer@'
 assert_job_excludes "$smoke_workflow" release-runner 'ductor-ci bootstrap'
@@ -437,9 +476,25 @@ if grep --extended-regexp --quiet \
 fi
 assert_job_contains "$container_smoke_workflow" slot \
   'ductor image status --pool "$EXPECTED_POOL"'
+assert_container_contract "$container_smoke_workflow" slot \
+  "\${{ format('ductor.invalid/runtime/{0}:v1', inputs.runtime) }}" 5 300
+assert_workflow_contains "$container_smoke_workflow" \
+  'description: Exact logical Ductor runtime exercised by every slot'
 
 if grep --fixed-strings --quiet 'ductor-ci bootstrap' "${workflows[@]}"; then
   fail 'trusted workflows must not invoke the removed ductor-ci bootstrap path'
+fi
+if grep --fixed-strings --quiet 'ductor run' "${workflows[@]}"; then
+  fail 'trusted workflows must execute directly inside job containers'
+fi
+if grep --extended-regexp --quiet '^[[:space:]]{4}services:' "${workflows[@]}"; then
+  fail 'trusted workflows must not use GitHub YAML service containers'
+fi
+if grep --fixed-strings --quiet 'continue-on-error:' "${workflows[@]}"; then
+  fail 'trusted workflows must not weaken failures with continue-on-error'
+fi
+if grep --extended-regexp --quiet 'uses:[[:space:]]+docker://' "${workflows[@]}"; then
+  fail 'trusted workflows must not use container actions'
 fi
 if grep --fixed-strings --quiet 'ductor-profile-' README.md "${workflows[@]}" \
   "$container_smoke_workflow"; then

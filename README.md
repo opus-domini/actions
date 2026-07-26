@@ -15,8 +15,11 @@ Push, schedule, and manual dispatch are accepted only on the default branch.
 Pull requests never execute `make ci-full` through the reusable CI workflow.
 GitHub-hosted pull requests remain self-contained: they install the publisher's
 reviewed Go, Node, npm, golangci-lint and govulncheck versions on an isolated
-hosted runner. Trusted jobs only check out the requested revision and call
-`ductor run`; `services: true` selects the private `go-node-services` runtime,
+hosted runner. Each trusted job declares a logical
+`ductor.invalid/runtime/<id>:v1` job container and an exact timeout in seconds.
+The runner hook resolves that marker to the private signed digest and creates
+the sandbox before any step. Steps then execute `make` directly;
+`services: true` selects the private `go-node-services` runtime,
 `frontend: true` selects `go-node`, otherwise CI selects `go`.
 Callers choose behavior and capability, never tool versions or OCI identities.
 
@@ -37,9 +40,10 @@ successfully. A stale recovery request or a missing, failed, cancelled,
 mismatched, or timed-out CI run blocks publication.
 
 The publication job executes `goreleaser release --clean` exactly once inside
-the signed `go-release` runtime. Only the GitHub token, repository/ref context
-and OIDC request variables are forwarded by name. CI is not repeated during
-publication.
+the signed `go-release` job container. GitHub provides the job-scoped token,
+repository/ref context and OIDC request variables directly to that sandbox; no
+host-side command wrapper or environment forwarding API remains. CI is not
+repeated during publication.
 
 All third-party actions are pinned to immutable commit SHAs.
 
