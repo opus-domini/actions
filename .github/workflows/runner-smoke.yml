@@ -39,7 +39,9 @@ jobs:
             command -v "$executable" >/dev/null
           done
           for executable in goreleaser syft cosign; do
-            ! command -v "$executable" >/dev/null
+            if command -v "$executable" >/dev/null; then
+              exit 1
+            fi
           done
           if [[ "${{ inputs.services }}" == true ]]; then
             socket_path="${DOCKER_HOST#unix://}"
@@ -67,5 +69,7 @@ jobs:
             command -v "$executable" >/dev/null
           done
           for executable in golangci-lint govulncheck; do
-            ! command -v "$executable" >/dev/null
+            if command -v "$executable" >/dev/null; then
+              exit 1
+            fi
           done
