@@ -51,11 +51,11 @@ variable "SYFT_IMAGE" {
 }
 
 variable "POSTGIS_IMAGE" {
-  default = "postgis/postgis:16-3.5-alpine@sha256:40f6188236bda3c2a0d2365d415872fde2ccf6bc8b70ae481e093a845bb07b5d"
+  default = "postgis/postgis:18-3.6-alpine@sha256:4f8df0958dd321f520f917be5d0b338802928e4e1ebc4720f774168f4bbc2836"
 }
 
 variable "REDIS_IMAGE" {
-  default = "redis:7.4.9-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99"
+  default = "redis:8-alpine@sha256:8096655e437712b07503796fb64d81359256cfcff0ab29d95a7da72863786efb"
 }
 
 variable "RUSTFS_IMAGE" {
