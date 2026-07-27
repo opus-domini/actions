@@ -1,5 +1,5 @@
-variable "REGISTRY" {
-  default = "ghcr.io/opus-domini"
+variable "IMAGE_PREFIX" {
+  default = "ductor.publisher"
 }
 
 variable "TAG" {
@@ -50,10 +50,6 @@ variable "SYFT_IMAGE" {
   default = "anchore/syft:v1.46.0@sha256:473a60e3a58e29aca3aedb3e99e787bb4ef273917e44d10fcbea4330a07320bb"
 }
 
-variable "COSIGN_IMAGE" {
-  default = "ghcr.io/sigstore/cosign/cosign:v3.1.1@sha256:6bbe0d281d955c79f85b325f0f7e651c1bcab5a4fa4ad4903d74955178a3b2eb"
-}
-
 variable "POSTGIS_IMAGE" {
   default = "postgis/postgis:16-3.5-alpine@sha256:40f6188236bda3c2a0d2365d415872fde2ccf6bc8b70ae481e093a845bb07b5d"
 }
@@ -77,8 +73,6 @@ group "default" {
 target "common" {
   context    = "images"
   platforms  = ["linux/amd64"]
-  provenance = "mode=max"
-  sbom       = true
   args = {
     BUILD_DATE          = BUILD_DATE
     DOCKER_CLI_IMAGE    = DOCKER_CLI_IMAGE
@@ -89,7 +83,6 @@ target "common" {
     GOVULNCHECK_VERSION = GOVULNCHECK_VERSION
     NPM_VERSION         = NPM_VERSION
     SYFT_IMAGE          = SYFT_IMAGE
-    COSIGN_IMAGE        = COSIGN_IMAGE
     POSTGIS_IMAGE       = POSTGIS_IMAGE
     REDIS_IMAGE         = REDIS_IMAGE
     REVISION            = REVISION
@@ -103,41 +96,41 @@ target "common" {
 target "go" {
   inherits   = ["common"]
   dockerfile = "go/Dockerfile"
-  tags       = ["${REGISTRY}/ci-go:${TAG}"]
+  tags       = ["${IMAGE_PREFIX}/go:${REVISION}"]
 }
 
 target "go-node" {
   inherits   = ["common"]
   dockerfile = "go-node/Dockerfile"
-  tags       = ["${REGISTRY}/ci-go-node:${TAG}"]
+  tags       = ["${IMAGE_PREFIX}/go-node:${REVISION}"]
 }
 
 target "go-release" {
   inherits   = ["common"]
   dockerfile = "go-release/Dockerfile"
-  tags       = ["${REGISTRY}/ci-go-release:${TAG}"]
+  tags       = ["${IMAGE_PREFIX}/go-release:${REVISION}"]
 }
 
 target "postgis" {
   inherits   = ["common"]
   dockerfile = "postgis/Dockerfile"
-  tags       = ["${REGISTRY}/ci-postgis:${TAG}"]
+  tags       = ["${IMAGE_PREFIX}/postgis:${REVISION}"]
 }
 
 target "redis" {
   inherits   = ["common"]
   dockerfile = "redis/Dockerfile"
-  tags       = ["${REGISTRY}/ci-redis:${TAG}"]
+  tags       = ["${IMAGE_PREFIX}/redis:${REVISION}"]
 }
 
 target "rustfs" {
   inherits   = ["common"]
   dockerfile = "rustfs/Dockerfile"
-  tags       = ["${REGISTRY}/ci-rustfs:${TAG}"]
+  tags       = ["${IMAGE_PREFIX}/rustfs:${REVISION}"]
 }
 
 target "ryuk" {
   inherits   = ["common"]
   dockerfile = "ryuk/Dockerfile"
-  tags       = ["${REGISTRY}/ci-ryuk:${TAG}"]
+  tags       = ["${IMAGE_PREFIX}/ryuk:${REVISION}"]
 }

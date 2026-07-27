@@ -9,7 +9,6 @@ workflows=(
   .github/workflows/release-pr.yml
   .github/workflows/release.yml
   .github/workflows/runner-smoke.yml
-  .github/workflows/runtime-images.yml
 )
 
 metadata_workflows=(
@@ -18,32 +17,12 @@ metadata_workflows=(
   .github/workflows/release-pr.yml
   .github/workflows/release.yml
   .github/workflows/runner-smoke.yml
-  .github/workflows/runtime-images.yml
 )
 
 fail() {
   printf 'workflow validation failed: %s\n' "$*" >&2
   exit 1
 }
-
-runtime_workflow=.github/workflows/runtime-images.yml
-for expected in \
-  'runs-on: ubuntu-latest' \
-  'packages: write' \
-  'id-token: write' \
-  'provenance: mode=max' \
-  'sbom: true' \
-  'DOCKER_CLI_IMAGE=${{ steps.build.outputs.docker_cli_image }}' \
-  'cosign sign --yes'; do
-  grep --fixed-strings --quiet -- "$expected" "$runtime_workflow" \
-    || fail "${runtime_workflow} must contain: ${expected}"
-done
-
-if grep --extended-regexp --quiet \
-  'runs-on:[[:space:]]+(ductor-ci|ductor-release|\[)' \
-  "$runtime_workflow"; then
-  fail 'runtime image publishers must use only GitHub-hosted runners'
-fi
 
 for dockerfile in images/go/Dockerfile images/go-node/Dockerfile \
   images/go-release/Dockerfile images/postgis/Dockerfile \
@@ -56,6 +35,10 @@ for dockerfile in images/go/Dockerfile images/go-node/Dockerfile \
     fail "${dockerfile} must not copy repository or host material"
   fi
 done
+
+if grep --recursive --fixed-strings --quiet 'ghcr.io' images; then
+  fail 'trusted runtime sources must not depend on GHCR'
+fi
 
 if ! docker buildx bake --file images/docker-bake.hcl --print \
   | grep --fixed-strings --quiet '"linux/amd64"'; then

@@ -17,11 +17,11 @@ GitHub-hosted pull requests remain self-contained: they install the publisher's
 reviewed Go, Node, npm, golangci-lint and govulncheck versions on an isolated
 hosted runner. Each trusted job declares a logical
 `ductor.invalid/runtime/<id>:v1` job container and an exact timeout in seconds.
-The runner hook resolves that marker to the private signed digest and creates
+The runner hook resolves that marker to a compiled local image ID and creates
 the sandbox before any step. Steps then execute `make` directly;
-`services: true` selects the private `go-node-services` runtime,
+`services: true` selects the `go-node-services` runtime,
 `frontend: true` selects `go-node`, otherwise CI selects `go`.
-Callers choose behavior and capability, never tool versions or OCI identities.
+Callers choose behavior and capability, never tool versions or image identities.
 
 ## Release contract
 
@@ -40,27 +40,28 @@ successfully. A stale recovery request or a missing, failed, cancelled,
 mismatched, or timed-out CI run blocks publication.
 
 The publication job executes `goreleaser release --clean` exactly once inside
-the signed `go-release` job container. GitHub provides the job-scoped token,
+the prewarmed `go-release` job container. GitHub provides the job-scoped token,
 repository/ref context and OIDC request variables directly to that sandbox; no
 host-side command wrapper or environment forwarding API remains. CI is not
 repeated during publication.
 
 All third-party actions are pinned to immutable commit SHAs.
 
-## Trusted runtime images
+## Trusted runtime sources
 
-The reusable trusted workflows consume public OCI runtimes built by this
-repository. The image publisher itself always runs on GitHub-hosted Linux and
-publishes only `linux/amd64` images with provenance, SBOM, and a keyless
-signature over the immutable digest. Version pins and rebuild instructions live
-in [`images/README.md`](images/README.md).
+This repository owns only the host-agnostic Dockerfiles, immutable upstream
+pins and local Bake definition for the reusable trusted workflows. It does not
+publish runtime packages and contains no remote image-publisher workflow.
+Version pins and rebuild instructions live in
+[`images/README.md`](images/README.md).
+
+On the private Ductor host, an operator builds one `linux/amd64` image directly
+into a dedicated rootless release engine. Root-only Ductor capture then records
+the Docker image ID, verifies the reviewed source/revision labels, and streams a
+Docker archive into its content-addressed local store. Ductor loads that archive
+into each drained target engine and jobs remain strictly no-pull.
 
 Runtime images contain toolchains only. Listener inventory, cache locations,
-credentials, host paths, trust policy, and the selected image digest remain
-private Ductor configuration and are never published here.
-
-Tags are discovery outputs, not execution identity. Ductor verifies each
-publisher's exact OIDC workflow identity, provenance and SBOM, pulls the digest
-only while a pool is drained, and records a local ready image. Job execution is
-strictly no-pull: a missing or divergent local digest fails before the project
-command starts.
+credentials, host paths, trust policy, captured archives and selected image IDs
+remain private Ductor configuration and are never published here. A missing or
+divergent local image fails before the project command starts.
