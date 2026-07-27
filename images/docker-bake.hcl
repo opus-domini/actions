@@ -26,6 +26,14 @@ variable "GOVULNCHECK_VERSION" {
   default = "1.6.0"
 }
 
+variable "JQ_VERSION" {
+  default = "1.6-2.1+deb12u2"
+}
+
+variable "LIBONIG_VERSION" {
+  default = "6.9.8-1"
+}
+
 variable "GO_IMAGE" {
   default = "golang:1.26.5-bookworm@sha256:1ecb7edf62a0408027bd5729dfd6b1b8766e578e8df93995b225dfd0944eb651"
 }
@@ -81,6 +89,8 @@ target "common" {
     GOLANGCI_LINT_IMAGE = GOLANGCI_LINT_IMAGE
     GORELEASER_IMAGE    = GORELEASER_IMAGE
     GOVULNCHECK_VERSION = GOVULNCHECK_VERSION
+    JQ_VERSION          = JQ_VERSION
+    LIBONIG_VERSION     = LIBONIG_VERSION
     NPM_VERSION         = NPM_VERSION
     SYFT_IMAGE          = SYFT_IMAGE
     POSTGIS_IMAGE       = POSTGIS_IMAGE

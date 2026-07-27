@@ -16,9 +16,17 @@ FROM ${SYFT_IMAGE} AS syft
 FROM ${GO_IMAGE}
 ARG REVISION=unknown
 ARG BUILD_DATE=1970-01-01T00:00:00Z
+ARG JQ_VERSION=1.6-2.1+deb12u2
+ARG LIBONIG_VERSION=6.9.8-1
 ARG SOURCE_DATE_EPOCH=0
 ARG VERSION=dev
 
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+      "jq=${JQ_VERSION}" \
+      "libjq1=${JQ_VERSION}" \
+      "libonig5=${LIBONIG_VERSION}" \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=node /usr/local/ /usr/local/
 COPY --from=goreleaser /usr/bin/goreleaser /usr/local/bin/goreleaser
 COPY --from=syft /syft /usr/local/bin/syft

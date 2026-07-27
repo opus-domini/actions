@@ -65,7 +65,7 @@ jobs:
       - name: Verify release runtime capacity
         run: |
           ductor image status --pool "$DUCTOR_POOL"
-          for executable in go node npm goreleaser syft cosign; do
+          for executable in go node npm jq goreleaser syft cosign; do
             command -v "$executable" >/dev/null
           done
           for executable in golangci-lint govulncheck; do

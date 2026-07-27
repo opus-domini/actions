@@ -439,6 +439,8 @@ assert_container_contract "$smoke_workflow" ci-runner \
 assert_job_contains "$smoke_workflow" ci-runner 'socket_path="${DOCKER_HOST#unix://}"'
 assert_job_contains "$smoke_workflow" ci-runner 'for executable in goreleaser syft cosign; do'
 assert_job_contains "$smoke_workflow" release-runner 'ductor image status --pool "$DUCTOR_POOL"'
+assert_job_contains "$smoke_workflow" release-runner \
+  'for executable in go node npm jq goreleaser syft cosign; do'
 assert_container_contract "$smoke_workflow" release-runner \
   'ductor.invalid/runtime/go-release:v1' 20 1200
 assert_job_contains "$smoke_workflow" release-runner 'for executable in golangci-lint govulncheck; do'
