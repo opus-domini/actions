@@ -26,6 +26,10 @@ variable "GOVULNCHECK_VERSION" {
   default = "1.6.0"
 }
 
+variable "GH_VERSION" {
+  default = "2.23.0+dfsg1-1"
+}
+
 variable "JQ_VERSION" {
   default = "1.6-2.1+deb12u2"
 }
@@ -89,6 +93,7 @@ target "common" {
     GOLANGCI_LINT_IMAGE = GOLANGCI_LINT_IMAGE
     GORELEASER_IMAGE    = GORELEASER_IMAGE
     GOVULNCHECK_VERSION = GOVULNCHECK_VERSION
+    GH_VERSION          = GH_VERSION
     JQ_VERSION          = JQ_VERSION
     LIBONIG_VERSION     = LIBONIG_VERSION
     NPM_VERSION         = NPM_VERSION

@@ -33,8 +33,8 @@ jobs:
         DUCTOR_JOB_TIMEOUT_SECONDS: "1200"
     steps:
       - name: Verify CI runtime capacity
+        shell: bash
         run: |
-          ductor image status --pool "$DUCTOR_POOL"
           for executable in go node npm golangci-lint govulncheck; do
             command -v "$executable" >/dev/null
           done
@@ -63,9 +63,9 @@ jobs:
         DUCTOR_JOB_TIMEOUT_SECONDS: "1200"
     steps:
       - name: Verify release runtime capacity
+        shell: bash
         run: |
-          ductor image status --pool "$DUCTOR_POOL"
-          for executable in go node npm jq goreleaser syft cosign; do
+          for executable in go node npm gh jq goreleaser syft cosign; do
             command -v "$executable" >/dev/null
           done
           for executable in golangci-lint govulncheck; do

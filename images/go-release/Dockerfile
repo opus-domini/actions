@@ -16,6 +16,7 @@ FROM ${SYFT_IMAGE} AS syft
 FROM ${GO_IMAGE}
 ARG REVISION=unknown
 ARG BUILD_DATE=1970-01-01T00:00:00Z
+ARG GH_VERSION=2.23.0+dfsg1-1
 ARG JQ_VERSION=1.6-2.1+deb12u2
 ARG LIBONIG_VERSION=6.9.8-1
 ARG SOURCE_DATE_EPOCH=0
@@ -23,6 +24,7 @@ ARG VERSION=dev
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
+      "gh=${GH_VERSION}" \
       "jq=${JQ_VERSION}" \
       "libjq1=${JQ_VERSION}" \
       "libonig5=${LIBONIG_VERSION}" \

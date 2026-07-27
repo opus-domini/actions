@@ -432,15 +432,15 @@ test "$(recovery_target recovery-head recovery-head release-merge true true fals
 
 smoke_workflow=.github/workflows/runner-smoke.yml
 assert_workflow_contains "$smoke_workflow" 'permissions: {}'
-assert_job_contains "$smoke_workflow" ci-runner 'ductor image status --pool "$DUCTOR_POOL"'
 assert_container_contract "$smoke_workflow" ci-runner \
   "\${{ format('ductor.invalid/runtime/{0}:v1', inputs.services && 'go-node-services' || 'go-node') }}" \
   20 1200
+assert_job_contains "$smoke_workflow" ci-runner 'shell: bash'
 assert_job_contains "$smoke_workflow" ci-runner 'socket_path="${DOCKER_HOST#unix://}"'
 assert_job_contains "$smoke_workflow" ci-runner 'for executable in goreleaser syft cosign; do'
-assert_job_contains "$smoke_workflow" release-runner 'ductor image status --pool "$DUCTOR_POOL"'
+assert_job_contains "$smoke_workflow" release-runner 'shell: bash'
 assert_job_contains "$smoke_workflow" release-runner \
-  'for executable in go node npm jq goreleaser syft cosign; do'
+  'for executable in go node npm gh jq goreleaser syft cosign; do'
 assert_container_contract "$smoke_workflow" release-runner \
   'ductor.invalid/runtime/go-release:v1' 20 1200
 assert_job_contains "$smoke_workflow" release-runner 'for executable in golangci-lint govulncheck; do'

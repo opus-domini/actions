@@ -9,7 +9,7 @@ immutable local image IDs, pools, trust domains, mounts, and resource limits.
 | --- | --- |
 | `go` | Go CI, golangci-lint, govulncheck |
 | `go-node` | Go CI, Node/npm and the Docker CLI client |
-| `go-release` | Go, Node, npm, jq, GoReleaser, Syft, Cosign |
+| `go-release` | Go, Node, npm, GitHub CLI, jq, GoReleaser, Syft, Cosign |
 | `postgis` | Pinned PostGIS integration-test service |
 | `redis` | Pinned Redis integration-test service |
 | `rustfs` | Pinned RustFS integration-test service |
