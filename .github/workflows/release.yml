@@ -339,3 +339,79 @@ jobs:
         run: goreleaser release --clean
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  reconcile-release-please:
+    needs:
+      - release-gate
+      - goreleaser
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ductor-release
+    timeout-minutes: 5
+    container:
+      image: ductor.invalid/runtime/go-release:v1
+      env:
+        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: "300"
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Mark recovered release PR as tagged
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.release-gate.outputs.release_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_pr="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/$GITHUB_REPOSITORY/commits/$RELEASE_SHA/pulls" \
+            | jq -er \
+              --arg branch "$DEFAULT_BRANCH" \
+              --arg repository "$GITHUB_REPOSITORY" \
+              --arg sha "$RELEASE_SHA" \
+              '
+                [.[] | select(
+                  .state == "closed"
+                  and .merged_at != null
+                  and .merge_commit_sha == $sha
+                  and .base.ref == $branch
+                  and .base.repo.full_name == $repository
+                  and .head.repo.full_name == $repository
+                  and (.head.ref | startswith("release-please--branches--" + $branch))
+                )]
+                | if length == 1
+                  then .[0]
+                  else error("expected exactly one merged Release Please pull request")
+                  end
+              ')"
+          release_pr_number="$(jq -r .number <<<"$release_pr")"
+
+          if jq -e 'any(.labels[]; .name == "autorelease: pending")' \
+            <<<"$release_pr" >/dev/null; then
+            gh pr edit "$release_pr_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --remove-label 'autorelease: pending' \
+              --add-label 'autorelease: tagged'
+          elif jq -e 'any(.labels[]; .name == "autorelease: tagged")' \
+            <<<"$release_pr" >/dev/null; then
+            echo "Release PR #${release_pr_number} is already tagged."
+          else
+            echo "::error title=Invalid Release Please state::Release PR #${release_pr_number} has neither autorelease label."
+            exit 1
+          fi
+
+          labels="$(gh api \
+            "repos/$GITHUB_REPOSITORY/pulls/$release_pr_number" \
+            --jq '[.labels[].name]')"
+          if ! jq -e '
+            (index("autorelease: tagged") != null)
+            and (index("autorelease: pending") == null)
+          ' <<<"$labels" >/dev/null; then
+            echo "::error title=Release Please reconciliation failed::Release PR #${release_pr_number} was not marked as tagged."
+            exit 1
+          fi
+
+          echo "Release PR #${release_pr_number} marked as tagged."

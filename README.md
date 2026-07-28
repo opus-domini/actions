@@ -43,7 +43,10 @@ The publication job executes `goreleaser release --clean` exactly once inside
 the prewarmed `go-release` job container. GitHub provides the job-scoped token,
 repository/ref context and OIDC request variables directly to that sandbox; no
 host-side command wrapper or environment forwarding API remains. CI is not
-repeated during publication.
+repeated during publication. After a successful manual recovery, a final
+metadata job resolves the exact merged Release Please pull request from the
+canonical release commit and replaces `autorelease: pending` with
+`autorelease: tagged`; failed publication never advances that state.
 
 All third-party actions are pinned to immutable commit SHAs.
 

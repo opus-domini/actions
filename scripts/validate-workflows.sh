@@ -288,6 +288,29 @@ goreleaser_invocations="$(job_block "$publish_workflow" goreleaser \
 test "$goreleaser_invocations" -eq 1 \
   || fail 'the publication job must invoke GoReleaser exactly once inside its job container'
 
+assert_job_contains "$publish_workflow" reconcile-release-please \
+  "if: \${{ github.event_name == 'workflow_dispatch' }}"
+assert_container_contract "$publish_workflow" reconcile-release-please \
+  'ductor.invalid/runtime/go-release:v1' 5 300
+assert_job_contains "$publish_workflow" reconcile-release-please \
+  '- goreleaser'
+assert_job_contains "$publish_workflow" reconcile-release-please \
+  'issues: write'
+assert_job_contains "$publish_workflow" reconcile-release-please \
+  'pull-requests: write'
+assert_job_contains "$publish_workflow" reconcile-release-please \
+  'repos/$GITHUB_REPOSITORY/commits/$RELEASE_SHA/pulls'
+assert_job_contains "$publish_workflow" reconcile-release-please \
+  '.merge_commit_sha == $sha'
+assert_job_contains "$publish_workflow" reconcile-release-please \
+  'autorelease: pending'
+assert_job_contains "$publish_workflow" reconcile-release-please \
+  'autorelease: tagged'
+assert_job_contains "$publish_workflow" reconcile-release-please \
+  'repos/$GITHUB_REPOSITORY/pulls/$release_pr_number'
+assert_job_excludes "$publish_workflow" reconcile-release-please \
+  'contents: write'
+
 if grep --fixed-strings --quiet 'run: make ci-' "$publish_workflow"; then
   fail 'release publication must not repeat CI'
 fi
@@ -429,6 +452,29 @@ test "$(recovery_target stale-head recovery-head release-merge true true true)" 
 test "$(recovery_target recovery-head recovery-head release-merge false true true)" = rejected
 test "$(recovery_target recovery-head recovery-head release-merge true false true)" = rejected
 test "$(recovery_target recovery-head recovery-head release-merge true true false)" = rejected
+
+recovery_label_action() {
+  local goreleaser_succeeded="$1"
+  local release_pr_matches="$2"
+  local pending_label="$3"
+  local tagged_label="$4"
+
+  if [[ "$goreleaser_succeeded" != true || "$release_pr_matches" != true ]]; then
+    printf '%s\n' rejected
+  elif [[ "$pending_label" == true ]]; then
+    printf '%s\n' reconcile
+  elif [[ "$tagged_label" == true ]]; then
+    printf '%s\n' complete
+  else
+    printf '%s\n' rejected
+  fi
+}
+
+test "$(recovery_label_action true true true false)" = reconcile
+test "$(recovery_label_action true true false true)" = complete
+test "$(recovery_label_action false true true false)" = rejected
+test "$(recovery_label_action true false true false)" = rejected
+test "$(recovery_label_action true true false false)" = rejected
 
 smoke_workflow=.github/workflows/runner-smoke.yml
 assert_workflow_contains "$smoke_workflow" 'permissions: {}'
