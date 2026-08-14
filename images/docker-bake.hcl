@@ -39,7 +39,7 @@ variable "LIBONIG_VERSION" {
 }
 
 variable "GO_IMAGE" {
-  default = "golang:1.26.5-bookworm@sha256:1ecb7edf62a0408027bd5729dfd6b1b8766e578e8df93995b225dfd0944eb651"
+  default = "golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36"
 }
 
 variable "NODE_IMAGE" {
