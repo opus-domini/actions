@@ -15,7 +15,7 @@ FROM ${GOLANGCI_LINT_IMAGE} AS golangci
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli
 
 FROM ${GO_IMAGE} AS govulncheck
-ARG GOVULNCHECK_VERSION=1.6.0
+ARG GOVULNCHECK_VERSION=1.7.0
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     GOBIN=/out CGO_ENABLED=0 go install \
       "golang.org/x/vuln/cmd/govulncheck@v${GOVULNCHECK_VERSION}"

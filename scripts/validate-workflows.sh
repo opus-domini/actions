@@ -131,7 +131,15 @@ while IFS= read -r action_ref; do
 done < <(sed -nE 's/^[[:space:]]*uses:[[:space:]]+([^[:space:]]+).*/\1/p' .github/workflows/*.yml)
 
 ci_workflow=.github/workflows/ci.yml
+golangci_lint_version="$(sed -n 's/^GOLANGCI_LINT_VERSION=//p' images/versions.env)"
+govulncheck_version="$(sed -n 's/^GOVULNCHECK_VERSION=//p' images/versions.env)"
+[[ -n "$golangci_lint_version" && -n "$govulncheck_version" ]] \
+  || fail 'the reviewed CI tool versions must be present'
 assert_job_contains "$ci_workflow" full-hosted 'runs-on: ubuntu-latest'
+assert_job_contains "$ci_workflow" full-hosted \
+  "GOLANGCI_LINT_VERSION: v${golangci_lint_version}"
+assert_job_contains "$ci_workflow" full-hosted \
+  "GOVULNCHECK_VERSION: v${govulncheck_version}"
 assert_job_contains "$ci_workflow" full-hosted '- name: Fast CI'
 assert_job_contains "$ci_workflow" full-hosted 'run: make ci-fast'
 assert_job_excludes "$ci_workflow" full-hosted 'ductor.invalid/runtime/'
@@ -155,6 +163,15 @@ for removed_input in golangci-lint-version govulncheck-version goreleaser \
     fail "${ci_workflow} must not expose tool version input ${removed_input}"
   fi
 done
+
+for dockerfile in images/go/Dockerfile images/go-node/Dockerfile; do
+  grep --fixed-strings --quiet \
+    "ARG GOVULNCHECK_VERSION=${govulncheck_version}" "$dockerfile" \
+    || fail "${dockerfile} must use the reviewed govulncheck version"
+done
+grep --fixed-strings --quiet \
+  "default = \"${govulncheck_version}\"" images/docker-bake.hcl \
+  || fail 'the Bake definition must use the reviewed govulncheck version'
 
 route_ci() {
   local event_name="$1"

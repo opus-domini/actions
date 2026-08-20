@@ -23,7 +23,7 @@ variable "NPM_VERSION" {
 }
 
 variable "GOVULNCHECK_VERSION" {
-  default = "1.6.0"
+  default = "1.7.0"
 }
 
 variable "GH_VERSION" {
