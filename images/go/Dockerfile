@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.12
 
-ARG GO_IMAGE=golang:1.26.7-bookworm@sha256:6ef6e30f0ea5c384f6d111cf856e024e3086bbdcb1779da3f3b3fbba0aea53d2
+ARG GO_IMAGE=golang:1.27.0-bookworm@sha256:484ef6066fa69acb059fdfeda7ba2b8f7391f2ef6abc6f9b8411e669ebd56466
 ARG GOLANGCI_LINT_IMAGE=golangci/golangci-lint:v2.12.2@sha256:5cceeef04e53efe1470638d4b4b4f5ceefd574955ab3941b2d9a68a8c9ad5240
 
 FROM ${GOLANGCI_LINT_IMAGE} AS golangci
