@@ -39,15 +39,15 @@ variable "LIBONIG_VERSION" {
 }
 
 variable "GO_IMAGE" {
-  default = "golang:1.27.0-bookworm@sha256:484ef6066fa69acb059fdfeda7ba2b8f7391f2ef6abc6f9b8411e669ebd56466"
+  default = "golang:1.27.1-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b"
 }
 
 variable "NODE_IMAGE" {
-  default = "node:26-bookworm-slim@sha256:2d49d876e96237d76de412761cf05dbfe5aee325cc4406a4d41d5824c5bb8beb"
+  default = "node:26.8.1-bookworm-slim@sha256:367679cf9792759492a486e4aa4b421764d71a9546a6dae8aab81a99eb797b3e"
 }
 
 variable "GOLANGCI_LINT_IMAGE" {
-  default = "golangci/golangci-lint:v2.13.1@sha256:d371321370bf2907bd13a8f6f8baff0e0ca7438d76fdf636b281eadf7e2305e3"
+  default = "golangci/golangci-lint:v2.13.2@sha256:ba07dffad130794ae79ebaa0056809d18c0168f3f846480ffd3eb6c04578b83d"
 }
 
 variable "DOCKER_CLI_IMAGE" {
