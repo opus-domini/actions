@@ -23,7 +23,7 @@ variable "NPM_VERSION" {
 }
 
 variable "GOVULNCHECK_VERSION" {
-  default = "1.7.0"
+  default = "1.8.0"
 }
 
 variable "GH_VERSION" {
@@ -51,27 +51,27 @@ variable "GOLANGCI_LINT_IMAGE" {
 }
 
 variable "DOCKER_CLI_IMAGE" {
-  default = "docker:29.1.5-cli@sha256:05dfa31f4afd64888ef4cc0cbb1ab4d07a4828ef01cd29baa891fecbe50faf49"
+  default = "docker:29.8.0-cli@sha256:eccaacfeed644c7de222ff047483568cb988dde95476fbaaf10ea2d04921bb66"
 }
 
 variable "GORELEASER_IMAGE" {
-  default = "goreleaser/goreleaser:v2.17.0@sha256:054eefd282c02233a2556ce2d1a60cd2f51dc565ffc2520dc38b5deb4dd1ad30"
+  default = "goreleaser/goreleaser:v2.18.1@sha256:92b918cc587dce6321b5fafc57ba93942a38592a7fbdb6cc3e300418b9f03a7e"
 }
 
 variable "SYFT_IMAGE" {
-  default = "anchore/syft:v1.46.0@sha256:473a60e3a58e29aca3aedb3e99e787bb4ef273917e44d10fcbea4330a07320bb"
+  default = "anchore/syft:v1.51.1@sha256:95fe0835e5bebc6f8b1f8acef68d47d63d594ef4c0f25c097ff853b23cbac74c"
 }
 
 variable "POSTGIS_IMAGE" {
-  default = "postgis/postgis:18-3.6-alpine@sha256:4f8df0958dd321f520f917be5d0b338802928e4e1ebc4720f774168f4bbc2836"
+  default = "postgis/postgis:18-3.6-alpine@sha256:ffcf0c4b904e41b9779f8098007fb5a9484025319c18c70cf8e1bcebb742b9b7"
 }
 
 variable "REDIS_IMAGE" {
-  default = "redis:8-alpine@sha256:8096655e437712b07503796fb64d81359256cfcff0ab29d95a7da72863786efb"
+  default = "redis:8-alpine@sha256:becdda6c7f4b3fb42e42fd7f120bbf5c54c4caaaf16f26da24e4563d2c1f0576"
 }
 
 variable "RUSTFS_IMAGE" {
-  default = "rustfs/rustfs:latest@sha256:60f4f2f41ce95216f8cac676e69f9d90c0bfec458a3bc7fd7fb9b7c2452ac57a"
+  default = "rustfs/rustfs:latest@sha256:b7014e0ce2bc703c1316b3ef760e29dfae61fe4a50d1a66fa89638e0f8ea211f"
 }
 
 variable "RYUK_IMAGE" {

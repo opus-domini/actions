@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.12
 
-ARG RUSTFS_IMAGE=rustfs/rustfs:latest@sha256:60f4f2f41ce95216f8cac676e69f9d90c0bfec458a3bc7fd7fb9b7c2452ac57a
+ARG RUSTFS_IMAGE=rustfs/rustfs:latest@sha256:b7014e0ce2bc703c1316b3ef760e29dfae61fe4a50d1a66fa89638e0f8ea211f
 FROM ${RUSTFS_IMAGE}
 ARG REVISION=unknown
 ARG BUILD_DATE=1970-01-01T00:00:00Z

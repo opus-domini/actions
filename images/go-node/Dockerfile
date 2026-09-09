@@ -3,7 +3,7 @@
 ARG GO_IMAGE=golang:1.27.1-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b
 ARG NODE_IMAGE=node:26.8.1-bookworm-slim@sha256:367679cf9792759492a486e4aa4b421764d71a9546a6dae8aab81a99eb797b3e
 ARG GOLANGCI_LINT_IMAGE=golangci/golangci-lint:v2.13.2@sha256:ba07dffad130794ae79ebaa0056809d18c0168f3f846480ffd3eb6c04578b83d
-ARG DOCKER_CLI_IMAGE=docker:29.1.5-cli@sha256:05dfa31f4afd64888ef4cc0cbb1ab4d07a4828ef01cd29baa891fecbe50faf49
+ARG DOCKER_CLI_IMAGE=docker:29.8.0-cli@sha256:eccaacfeed644c7de222ff047483568cb988dde95476fbaaf10ea2d04921bb66
 
 FROM ${NODE_IMAGE} AS node
 ARG NPM_VERSION=12.0.2
@@ -15,7 +15,7 @@ FROM ${GOLANGCI_LINT_IMAGE} AS golangci
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli
 
 FROM ${GO_IMAGE} AS govulncheck
-ARG GOVULNCHECK_VERSION=1.7.0
+ARG GOVULNCHECK_VERSION=1.8.0
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     GOBIN=/out CGO_ENABLED=0 go install \
       "golang.org/x/vuln/cmd/govulncheck@v${GOVULNCHECK_VERSION}"
