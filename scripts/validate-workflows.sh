@@ -24,11 +24,39 @@ fail() {
   exit 1
 }
 
+declare -A reviewed_versions
+while IFS='=' read -r name value; do
+  [[ -n "$name" ]] || continue
+  reviewed_versions["$name"]="$value"
+done < images/versions.env
+
+while IFS='=' read -r name value; do
+  [[ -n "${reviewed_versions[$name]:-}" ]] \
+    || fail "Bake argument ${name} is missing from images/versions.env"
+  [[ "$value" == "${reviewed_versions[$name]}" ]] \
+    || fail "Bake argument ${name} must match images/versions.env"
+done < <(awk '
+  /^variable "/ { name = $2; gsub(/"/, "", name) }
+  /^  default = "/ && (name ~ /_IMAGE$/ || name ~ /_VERSION$/) {
+    value = $3; gsub(/"/, "", value); print name "=" value
+  }
+' images/docker-bake.hcl)
+
 for dockerfile in images/go/Dockerfile images/go-node/Dockerfile \
   images/go-release/Dockerfile images/postgis/Dockerfile \
   images/redis/Dockerfile images/rustfs/Dockerfile images/ryuk/Dockerfile; do
-  grep --extended-regexp --quiet '^ARG .+_IMAGE=.+@sha256:[0-9a-f]{64}$' "$dockerfile" \
-    || fail "${dockerfile} must pin upstream images by digest"
+  image_arguments="$(sed -nE 's/^ARG ([A-Z_]+_IMAGE=.*)$/\1/p' "$dockerfile")"
+  [[ -n "$image_arguments" ]] || fail "${dockerfile} must declare pinned upstream images"
+  while IFS='=' read -r name value; do
+    [[ "$value" =~ ^.+@sha256:[0-9a-f]{64}$ ]] \
+      || fail "${dockerfile} argument ${name} must pin its image by digest"
+    [[ "$value" == "${reviewed_versions[$name]:-}" ]] \
+      || fail "${dockerfile} argument ${name} must match images/versions.env"
+  done <<<"$image_arguments"
+  while IFS='=' read -r name value; do
+    [[ "$value" == "${reviewed_versions[$name]:-}" ]] \
+      || fail "${dockerfile} argument ${name} must match images/versions.env"
+  done < <(sed -nE 's/^ARG ([A-Z_]+_VERSION=.*)$/\1/p' "$dockerfile")
   if grep --extended-regexp --quiet \
     'COPY[[:space:]].*(\.git|\.env|package-lock\.json|go\.sum|/home/|/var/)' \
     "$dockerfile"; then
@@ -140,6 +168,12 @@ assert_job_contains "$ci_workflow" full-hosted \
   "GOLANGCI_LINT_VERSION: v${golangci_lint_version}"
 assert_job_contains "$ci_workflow" full-hosted \
   "GOVULNCHECK_VERSION: v${govulncheck_version}"
+assert_job_contains "$ci_workflow" full-hosted \
+  "NPM_VERSION: ${reviewed_versions[NPM_VERSION]}"
+assert_job_contains "$ci_workflow" full-hosted \
+  "node-version: \"${reviewed_versions[NODE_VERSION]}\""
+assert_workflow_contains .github/workflows/validate.yml \
+  "go-version: ${reviewed_versions[GO_VERSION]}"
 assert_job_contains "$ci_workflow" full-hosted '- name: Fast CI'
 assert_job_contains "$ci_workflow" full-hosted 'run: make ci-fast'
 assert_job_excludes "$ci_workflow" full-hosted 'ductor.invalid/runtime/'

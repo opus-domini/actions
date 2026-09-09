@@ -16,6 +16,10 @@ immutable local image IDs, pools, trust domains, mounts, and resource limits.
 | `ryuk` | Pinned Testcontainers resource reaper |
 
 `versions.env` is the reviewed version and upstream-image pin ledger.
+Workflow validation checks every Dockerfile image and tool argument against
+that ledger, along with Bake defaults and hosted CI tool versions. Run
+`scripts/validate-workflows.sh` and `bash scripts/test-validate-workflows.sh`
+after updating pins; build and exercise changed images before publication.
 `docker-bake.hcl` is the canonical local build entry point:
 
 ```bash
