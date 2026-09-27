@@ -41,6 +41,18 @@ assert_rejected divergent-secondary-image images/go-node/Dockerfile \
 assert_rejected divergent-bake-image images/docker-bake.hcl \
   's/node:[^"]+/node:invalid/' \
   'Bake argument NODE_IMAGE must match images/versions.env'
+assert_rejected unpinned-node-ci-image images/node/Dockerfile \
+  's/^(ARG NODE_CI_IMAGE=.*)@sha256:[0-9a-f]+$/\1/' \
+  'argument NODE_CI_IMAGE must pin its image by digest'
+assert_rejected divergent-node-ci-vite-plus images/node/Dockerfile \
+  's/^ARG VITE_PLUS_VERSION=.*/ARG VITE_PLUS_VERSION=0.0.0/' \
+  'argument VITE_PLUS_VERSION must match images/versions.env'
+assert_rejected missing-node-runtime-marker .github/workflows/runner-smoke.yml \
+  's|ductor.invalid/runtime/node:v1|ductor.invalid/runtime/node:v2|' \
+  'job node-runner must contain: image: ductor.invalid/runtime/node:v1'
+assert_rejected missing-node-input .github/workflows/runner-smoke.yml \
+  's/description: Select the Node CI runtime/description: Mutated node runtime/' \
+  'must contain: description: Select the Node CI runtime'
 assert_rejected divergent-dockerfile-tool images/go-release/Dockerfile \
   's/^ARG NPM_VERSION=.*/ARG NPM_VERSION=0.0.0/' \
   'argument NPM_VERSION must match images/versions.env'

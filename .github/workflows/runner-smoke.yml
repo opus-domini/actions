@@ -14,6 +14,11 @@ on:
         required: false
         type: boolean
         default: false
+      node:
+        description: Select the Node CI runtime
+        required: false
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -23,7 +28,7 @@ concurrency:
 
 jobs:
   ci-runner:
-    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && !inputs.node }}
     runs-on: ductor-ci
     timeout-minutes: 20
     container:
@@ -50,7 +55,6 @@ jobs:
           else
             [[ -z "${DOCKER_HOST:-}" ]]
           fi
-
   release-runner:
     needs: ci-runner
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
@@ -73,3 +77,25 @@ jobs:
               exit 1
             fi
           done
+  node-runner:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && inputs.node }}
+    runs-on: ductor-ci
+    timeout-minutes: 20
+    container:
+      image: ductor.invalid/runtime/node:v1
+      env:
+        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: "1200"
+    steps:
+      - name: Verify Node runtime capacity
+        shell: bash
+        run: |
+          for executable in node npm vp git make; do
+            command -v "$executable" >/dev/null
+          done
+          for executable in goreleaser syft cosign golangci-lint govulncheck; do
+            if command -v "$executable" >/dev/null; then
+              exit 1
+            fi
+          done
+          [[ -z "${DOCKER_HOST:-}" ]]

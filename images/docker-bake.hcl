@@ -22,6 +22,14 @@ variable "NPM_VERSION" {
   default = "12.0.2"
 }
 
+variable "NPM_CI_VERSION" {
+  default = "12.1.0"
+}
+
+variable "VITE_PLUS_VERSION" {
+  default = "0.3.3"
+}
+
 variable "GOVULNCHECK_VERSION" {
   default = "1.8.0"
 }
@@ -44,6 +52,10 @@ variable "GO_IMAGE" {
 
 variable "NODE_IMAGE" {
   default = "node:26.8.1-bookworm-slim@sha256:367679cf9792759492a486e4aa4b421764d71a9546a6dae8aab81a99eb797b3e"
+}
+
+variable "NODE_CI_IMAGE" {
+  default = "node:26.10.0-bookworm@sha256:2aaae6d91f99fee84cfc92da9b52c22a185752d247746052bbc3f961e44478c6"
 }
 
 variable "GOLANGCI_LINT_IMAGE" {
@@ -79,7 +91,7 @@ variable "RYUK_IMAGE" {
 }
 
 group "default" {
-  targets = ["go", "go-node", "go-release", "postgis", "redis", "rustfs", "ryuk"]
+  targets = ["go", "go-node", "go-release", "node", "postgis", "redis", "rustfs", "ryuk"]
 }
 
 target "common" {
@@ -97,8 +109,10 @@ target "common" {
     JQ_VERSION          = JQ_VERSION
     LIBONIG_VERSION     = LIBONIG_VERSION
     NPM_VERSION         = NPM_VERSION
+    NPM_CI_VERSION      = NPM_CI_VERSION
+    VITE_PLUS_VERSION   = VITE_PLUS_VERSION
+    NODE_CI_IMAGE       = NODE_CI_IMAGE
     SYFT_IMAGE          = SYFT_IMAGE
-    POSTGIS_IMAGE       = POSTGIS_IMAGE
     REDIS_IMAGE         = REDIS_IMAGE
     REVISION            = REVISION
     SOURCE_DATE_EPOCH   = SOURCE_DATE_EPOCH
@@ -118,6 +132,12 @@ target "go-node" {
   inherits   = ["common"]
   dockerfile = "go-node/Dockerfile"
   tags       = ["${IMAGE_PREFIX}/go-node:${REVISION}"]
+}
+
+target "node" {
+  inherits   = ["common"]
+  dockerfile = "node/Dockerfile"
+  tags       = ["${IMAGE_PREFIX}/node:${REVISION}"]
 }
 
 target "go-release" {

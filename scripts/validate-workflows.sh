@@ -43,8 +43,9 @@ done < <(awk '
 ' images/docker-bake.hcl)
 
 for dockerfile in images/go/Dockerfile images/go-node/Dockerfile \
-  images/go-release/Dockerfile images/postgis/Dockerfile \
-  images/redis/Dockerfile images/rustfs/Dockerfile images/ryuk/Dockerfile; do
+  images/node/Dockerfile images/go-release/Dockerfile \
+  images/postgis/Dockerfile images/redis/Dockerfile \
+  images/rustfs/Dockerfile images/ryuk/Dockerfile; do
   image_arguments="$(sed -nE 's/^ARG ([A-Z_]+_IMAGE=.*)$/\1/p' "$dockerfile")"
   [[ -n "$image_arguments" ]] || fail "${dockerfile} must declare pinned upstream images"
   while IFS='=' read -r name value; do
@@ -206,6 +207,15 @@ done
 grep --fixed-strings --quiet \
   "default = \"${govulncheck_version}\"" images/docker-bake.hcl \
   || fail 'the Bake definition must use the reviewed govulncheck version'
+grep --fixed-strings --quiet 'target "node"' images/docker-bake.hcl \
+  || fail 'the Bake definition must define the node runtime target'
+node_ci_image="${reviewed_versions[NODE_CI_IMAGE]:-}"
+[[ -n "$node_ci_image" ]] || fail 'the reviewed node CI image must be present'
+grep --fixed-strings --quiet "ARG NODE_CI_IMAGE=${node_ci_image}" images/node/Dockerfile \
+  || fail 'images/node/Dockerfile must use the reviewed node CI image'
+grep --fixed-strings --quiet "ARG VITE_PLUS_VERSION=${reviewed_versions[VITE_PLUS_VERSION]}" \
+  images/node/Dockerfile \
+  || fail 'images/node/Dockerfile must use the reviewed Vite+ version'
 
 route_ci() {
   local event_name="$1"
@@ -532,6 +542,17 @@ assert_workflow_contains "$smoke_workflow" 'permissions: {}'
 assert_container_contract "$smoke_workflow" ci-runner \
   "\${{ format('ductor.invalid/runtime/{0}:v1', inputs.services && 'go-node-services' || 'go-node') }}" \
   20 1200
+assert_job_contains "$smoke_workflow" ci-runner \
+  "github.event.repository.default_branch) && !inputs.node }}"
+assert_workflow_contains "$smoke_workflow" 'description: Select the Node CI runtime'
+assert_container_contract "$smoke_workflow" node-runner \
+  'ductor.invalid/runtime/node:v1' 20 1200
+assert_job_contains "$smoke_workflow" node-runner 'shell: bash'
+assert_job_contains "$smoke_workflow" node-runner \
+  'for executable in node npm vp git make; do'
+assert_job_contains "$smoke_workflow" node-runner \
+  'for executable in goreleaser syft cosign golangci-lint govulncheck; do'
+assert_job_contains "$smoke_workflow" node-runner '[[ -z "${DOCKER_HOST:-}" ]]'
 assert_job_contains "$smoke_workflow" ci-runner 'shell: bash'
 assert_job_contains "$smoke_workflow" ci-runner 'socket_path="${DOCKER_HOST#unix://}"'
 assert_job_contains "$smoke_workflow" ci-runner 'for executable in goreleaser syft cosign; do'
