@@ -56,6 +56,20 @@ assert_rejected missing-node-input .github/workflows/runner-smoke.yml \
 assert_rejected divergent-dockerfile-tool images/go-release/Dockerfile \
   's/^ARG NPM_VERSION=.*/ARG NPM_VERSION=0.0.0/' \
   'argument NPM_VERSION must match images/versions.env'
+for runtime in go go-node; do
+  assert_rejected "unbounded-govulncheck-${runtime}" "images/${runtime}/Dockerfile" \
+    '/^ENV GOMAXPROCS=2 GOFLAGS=-p=2$/d' \
+    'must bound the govulncheck build stage'
+  assert_rejected "divergent-govulncheck-cpus-${runtime}" "images/${runtime}/Dockerfile" \
+    's/^ENV GOMAXPROCS=2 GOFLAGS=-p=2$/ENV GOMAXPROCS=3 GOFLAGS=-p=2/' \
+    'must bound the govulncheck build stage'
+  assert_rejected "divergent-govulncheck-programs-${runtime}" "images/${runtime}/Dockerfile" \
+    's/^ENV GOMAXPROCS=2 GOFLAGS=-p=2$/ENV GOMAXPROCS=2 GOFLAGS=-p=3/' \
+    'must bound the govulncheck build stage'
+  assert_rejected "misplaced-govulncheck-budget-${runtime}" "images/${runtime}/Dockerfile" \
+    '/^ENV GOMAXPROCS=2 GOFLAGS=-p=2$/d; /^FROM [$][{]GO_IMAGE[}]$/a ENV GOMAXPROCS=2 GOFLAGS=-p=2' \
+    'must bound the govulncheck build stage'
+done
 assert_rejected divergent-hosted-npm .github/workflows/ci.yml \
   's/NPM_VERSION: .*/NPM_VERSION: 0.0.0/' \
   'job full-hosted must contain: NPM_VERSION:'
