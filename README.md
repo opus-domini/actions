@@ -12,7 +12,7 @@ Public reusable workflows for Opus Domini repositories.
 | Manual dispatch | Default branch | Trusted `go` or `go-node` runtime | `make ci-full` |
 
 Push, schedule, and manual dispatch are accepted only on the default branch.
-Pull requests never execute `make ci-full` through the reusable CI workflow.
+The default CI selection runs `make ci-fast` for pull requests.
 GitHub-hosted pull requests remain self-contained: they install the publisher's
 reviewed Go, Node, npm, golangci-lint and govulncheck versions on an isolated
 hosted runner. Each trusted job declares a logical
@@ -22,6 +22,22 @@ the sandbox before any step. Steps then execute `make` directly;
 `services: true` selects the `go-node-services` runtime,
 `frontend: true` selects `go-node`, otherwise CI selects `go`.
 Callers choose behavior and capability, never tool versions or image identities.
+
+`confined: true` selects the complete confined gates for a private caller:
+`ci-coverage` and `ci-full-checks` run as two fixed core lanes, alongside the
+QML check and an aggregate `full-hosted` check. All four jobs use the reviewed
+`zadok-ci` runtime; the core, QML and aggregate deadlines are respectively
+60, 10 and 5 minutes. The caller owns the runtime-check and core-gate scripts
+in its checkout. The core script preserves its gate exit and emits its coverage
+evidence before cleanup; no coverage upload action or secret is passed to
+these four jobs.
+
+Confined jobs accept the same repository's private pull requests targeting the
+default branch, or default-branch push, schedule and manual dispatch events.
+Public, fork and explicitly hosted pull requests retain the hosted fast-CI
+route and never select these confined jobs. The generic trusted job is skipped
+when confined gates are selected. The reusable workflow owns CI concurrency;
+callers must not declare the same cancel-in-progress group themselves.
 
 ## Release contract
 

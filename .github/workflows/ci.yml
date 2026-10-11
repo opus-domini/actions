@@ -3,6 +3,11 @@ name: Reusable CI
 on:
   workflow_call:
     inputs:
+      confined:
+        description: Select the complete confined CI gates
+        required: false
+        type: boolean
+        default: false
       frontend:
         description: Select the Go and Node trusted runtime
         required: false
@@ -42,6 +47,7 @@ concurrency:
 
 jobs:
   full-hosted:
+    name: ${{ inputs.confined && 'hosted-unselected' || 'full-hosted' }}
     if: ${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -101,7 +107,7 @@ jobs:
           version: v11.3.1
 
   full-trusted:
-    if: ${{ (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || github.event.pull_request.base.ref == github.event.repository.default_branch) && (github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    if: ${{ !inputs.confined && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || github.event.pull_request.base.ref == github.event.repository.default_branch) && (github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)) }}
     runs-on: ductor-ci
     timeout-minutes: 30
     container:
@@ -130,3 +136,87 @@ jobs:
           token: ${{ secrets.codecov-token }}
           fail_ci_if_error: false
           version: v11.3.1
+
+  core-gates:
+    name: ${{ matrix.name }}
+    if: ${{ inputs.confined && github.event.repository.private && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || (github.event.pull_request.base.ref == github.event.repository.default_branch && !inputs.hosted-pull-requests && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    runs-on: ductor-ci
+    timeout-minutes: 60
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: "2"
+      GOFLAGS: -p=2
+    container:
+      image: ductor.invalid/runtime/zadok-ci:v1
+      env:
+        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: "3600"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: go-coverage
+            target: ci-coverage
+          - name: full-checks
+            target: ci-full-checks
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Require the complete confinement runtime
+        run: scripts/ci-runtime-check.sh core
+
+      - name: Core gate
+        env:
+          CI_TARGET: ${{ matrix.target }}
+        run: bash scripts/ci-core-gate.sh "$CI_TARGET"
+
+  omarchy-qml:
+    name: omarchy-qml
+    if: ${{ inputs.confined && github.event.repository.private && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || (github.event.pull_request.base.ref == github.event.repository.default_branch && !inputs.hosted-pull-requests && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    runs-on: ductor-ci
+    timeout-minutes: 10
+    container:
+      image: ductor.invalid/runtime/zadok-ci:v1
+      env:
+        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: "600"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Require the complete QML runtime
+        run: scripts/ci-runtime-check.sh qml
+
+      - name: Omarchy QML gate
+        run: make omarchy-plugin-check
+
+  confined-complete:
+    name: full-hosted
+    if: ${{ always() && inputs.confined && github.event.repository.private && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || (github.event.pull_request.base.ref == github.event.repository.default_branch && !inputs.hosted-pull-requests && github.event.pull_request.head.repo.full_name == github.repository)) }}
+    needs: [core-gates, omarchy-qml]
+    runs-on: ductor-ci
+    timeout-minutes: 5
+    container:
+      image: ductor.invalid/runtime/zadok-ci:v1
+      env:
+        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: "300"
+    steps:
+      - name: Require every full-CI gate
+        env:
+          CORE_RESULT: ${{ needs.core-gates.result }}
+          QML_RESULT: ${{ needs.omarchy-qml.result }}
+        run: |
+          test "$CORE_RESULT" = success
+          test "$QML_RESULT" = success

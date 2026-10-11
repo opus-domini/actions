@@ -65,3 +65,88 @@ assert_rejected divergent-hosted-node .github/workflows/ci.yml \
 assert_rejected divergent-validator-go .github/workflows/validate.yml \
   's/go-version: .*/go-version: 0.0.0/' \
   'must contain: go-version:'
+
+assert_rejected confined-string-selection .github/workflows/ci.yml \
+  '/^      confined:$/,/^      frontend:$/s/type: boolean/type: string/' \
+  'CI must expose only a default-false boolean confined selection'
+assert_rejected confined-default-selection .github/workflows/ci.yml \
+  '/^      confined:$/,/^      frontend:$/s/default: false/default: true/' \
+  'CI must expose only a default-false boolean confined selection'
+assert_rejected arbitrary-command-input .github/workflows/ci.yml \
+  '/^      frontend:$/i\      command:\n        type: string\n        default: ci-fast' \
+  'CI inputs must retain the finite reviewed capabilities'
+assert_rejected confined-missing-selection .github/workflows/ci.yml \
+  '/^  core-gates:$/,/^  omarchy-qml:$/s/inputs[.]confined && //' \
+  'confined job core-gates must retain the exact private event trust guard'
+assert_rejected confined-public-routing .github/workflows/ci.yml \
+  '/^  core-gates:$/,/^  omarchy-qml:$/s/github[.]event[.]repository[.]private && //' \
+  'confined job core-gates must retain the exact private event trust guard'
+assert_rejected confined-fork-routing .github/workflows/ci.yml \
+  '/^  core-gates:$/,/^  omarchy-qml:$/s/github[.]event[.]pull_request[.]head[.]repo[.]full_name == github[.]repository/true/' \
+  'confined job core-gates must retain the exact private event trust guard'
+assert_rejected confined-nondefault-base .github/workflows/ci.yml \
+  '/^  core-gates:$/,/^  omarchy-qml:$/s/github[.]event[.]pull_request[.]base[.]ref == github[.]event[.]repository[.]default_branch/true/' \
+  'confined job core-gates must retain the exact private event trust guard'
+assert_rejected generic-trusted-confined-overlap .github/workflows/ci.yml \
+  '/^  full-trusted:$/,/^  core-gates:$/s/!inputs[.]confined && //' \
+  'generic trusted routing must exclude confined selection only'
+assert_rejected hosted-pull-request-routing .github/workflows/ci.yml \
+  "/^  full-hosted:\$/,/^  full-trusted:\$/s/if: .*\$/if: \${{ !inputs.confined }}/" \
+  'hosted pull request routing must remain unchanged'
+assert_rejected confined-runtime .github/workflows/ci.yml \
+  's|ductor.invalid/runtime/zadok-ci:v1|ductor.invalid/runtime/go-node:v1|' \
+  'job core-gates must contain: image: ductor.invalid/runtime/zadok-ci:v1'
+assert_rejected confined-core-deadline .github/workflows/ci.yml \
+  '/^  core-gates:$/,/^  omarchy-qml:$/s/timeout-minutes: 60/timeout-minutes: 59/' \
+  'job core-gates must contain: timeout-minutes: 60'
+assert_rejected confined-core-budget .github/workflows/ci.yml \
+  's/DUCTOR_JOB_TIMEOUT_SECONDS: "3600"/DUCTOR_JOB_TIMEOUT_SECONDS: "3599"/' \
+  'job core-gates must contain: DUCTOR_JOB_TIMEOUT_SECONDS: "3600"'
+assert_rejected confined-qml-deadline .github/workflows/ci.yml \
+  '/^  omarchy-qml:$/,/^  confined-complete:$/s/timeout-minutes: 10/timeout-minutes: 9/' \
+  'job omarchy-qml must contain: timeout-minutes: 10'
+assert_rejected confined-aggregate-deadline .github/workflows/ci.yml \
+  "/^  confined-complete:\$/,\$s/timeout-minutes: 5/timeout-minutes: 4/" \
+  'job confined-complete must contain: timeout-minutes: 5'
+assert_rejected confined-extra-container-environment .github/workflows/ci.yml \
+  '/DUCTOR_JOB_TIMEOUT_SECONDS: "3600"/a\        GOMAXPROCS: "3"' \
+  'confined job core-gates must retain only its exact runtime and container environment'
+assert_rejected confined-extra-container-options .github/workflows/ci.yml \
+  '/DUCTOR_JOB_TIMEOUT_SECONDS: "3600"/a\      options: --privileged' \
+  'job core-gates must not contain: options:'
+assert_rejected confined-core-cpus .github/workflows/ci.yml \
+  's/GOMAXPROCS: "2"/GOMAXPROCS: "3"/' \
+  'confined core must preserve its exact Go budget and gate environment'
+assert_rejected confined-fail-fast .github/workflows/ci.yml \
+  's/fail-fast: false/fail-fast: true/' \
+  'confined core matrix must retain both complete fixed gates without fail-fast'
+assert_rejected confined-fast-target .github/workflows/ci.yml \
+  's/target: ci-full-checks/target: ci-fast/' \
+  'confined core matrix must retain both complete fixed gates without fail-fast'
+assert_rejected confined-missing-runtime-check .github/workflows/ci.yml \
+  's|run: scripts/ci-runtime-check.sh core|run: true|' \
+  'confined core must invoke only its checked-out runtime check and fixed core gate'
+assert_rejected confined-bypassed-core-script .github/workflows/ci.yml \
+  's|run: bash scripts/ci-core-gate.sh .*|run: make ci-coverage|' \
+  'confined core must invoke only its checked-out runtime check and fixed core gate'
+assert_rejected confined-persisted-checkout-credentials .github/workflows/ci.yml \
+  '/^  core-gates:$/,/^  omarchy-qml:$/s/persist-credentials: false/persist-credentials: true/' \
+  'job core-gates must contain: persist-credentials: false'
+assert_rejected confined-skipped-aggregate .github/workflows/ci.yml \
+  "/^  confined-complete:\$/,\$s/always[(][)] && //" \
+  'confined job confined-complete must retain the exact private event trust guard'
+assert_rejected confined-missing-qml-prerequisite .github/workflows/ci.yml \
+  's/needs: \[core-gates, omarchy-qml\]/needs: [core-gates]/' \
+  'job confined-complete must contain: needs: [core-gates, omarchy-qml]'
+assert_rejected confined-qml-result-bypass .github/workflows/ci.yml \
+  "s/test \"\\\$QML_RESULT\" = success/test \"\\\$QML_RESULT\" = skipped/" \
+  "job confined-complete must contain: test \"\$QML_RESULT\" = success"
+assert_rejected confined-secret-forwarding .github/workflows/ci.yml \
+  "/CI_TARGET: /a\\          CODECOV_TOKEN: \${{ secrets.codecov-token }}" \
+  'job core-gates must not contain: secrets.'
+assert_rejected confined-extra-job .github/workflows/ci.yml \
+  '/^jobs:$/a\  extra:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true' \
+  'CI must retain exactly the generic and four confined executions'
+assert_rejected confined-concurrency-removal .github/workflows/ci.yml \
+  's/^  group: ci-/  group: other-/' \
+  'must contain: group: ci-'

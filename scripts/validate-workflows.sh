@@ -199,6 +199,136 @@ for removed_input in golangci-lint-version govulncheck-version goreleaser \
   fi
 done
 
+confined_input="$(awk '
+  /^      confined:$/ { found = 1 }
+  found && $0 != "      confined:" && /^      [[:alnum:]_-]+:$/ { exit }
+  found { print }
+' "$ci_workflow")"
+test "$confined_input" = '      confined:
+        description: Select the complete confined CI gates
+        required: false
+        type: boolean
+        default: false' \
+  || fail 'CI must expose only a default-false boolean confined selection'
+ci_inputs="$(awk '
+  /^    inputs:$/ { inputs = 1; next }
+  inputs && /^    secrets:$/ { exit }
+  inputs && /^      [[:alnum:]_-]+:$/ { print }
+' "$ci_workflow")"
+test "$ci_inputs" = '      confined:
+      frontend:
+      frontend-lockfile:
+      hosted-pull-requests:
+      services:
+      upload-codecov:' \
+  || fail 'CI inputs must retain the finite reviewed capabilities'
+ci_jobs="$(awk '
+  /^jobs:$/ { jobs = 1; next }
+  jobs && /^  [[:alnum:]_-]+:$/ { print }
+' "$ci_workflow")"
+test "$ci_jobs" = '  full-hosted:
+  full-trusted:
+  core-gates:
+  omarchy-qml:
+  confined-complete:' \
+  || fail 'CI must retain exactly the generic and four confined executions'
+
+hosted_condition="if: \${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}"
+test "$(job_block "$ci_workflow" full-hosted | sed -n 's/^    if: /if: /p')" = "$hosted_condition" \
+  || fail 'hosted pull request routing must remain unchanged'
+assert_job_contains "$ci_workflow" full-hosted \
+  "name: \${{ inputs.confined && 'hosted-unselected' || 'full-hosted' }}"
+trusted_condition="if: \${{ !inputs.confined && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || github.event.pull_request.base.ref == github.event.repository.default_branch) && (github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)) }}"
+test "$(job_block "$ci_workflow" full-trusted | sed -n 's/^    if: /if: /p')" = "$trusted_condition" \
+  || fail 'generic trusted routing must exclude confined selection only'
+confined_trust="github.event.repository.private && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || (github.event.pull_request.base.ref == github.event.repository.default_branch && !inputs.hosted-pull-requests && github.event.pull_request.head.repo.full_name == github.repository))"
+for job in core-gates omarchy-qml confined-complete; do
+  condition="if: \${{ inputs.confined && ${confined_trust} }}"
+  if [[ "$job" == confined-complete ]]; then
+    condition="if: \${{ always() && inputs.confined && ${confined_trust} }}"
+  fi
+  test "$(job_block "$ci_workflow" "$job" | sed -n 's/^    if: /if: /p')" = "$condition" \
+    || fail "confined job ${job} must retain the exact private event trust guard"
+  assert_job_contains "$ci_workflow" "$job" 'runs-on: ductor-ci'
+  for forbidden in 'runs-on: ubuntu-latest' 'options:' 'permissions:' 'secrets.' \
+    'codecov/' 'GITHUB_TOKEN' 'actions/setup-go@' 'actions/setup-node@' \
+    'npm install' 'go install' 'docker.sock'; do
+    assert_job_excludes "$ci_workflow" "$job" "$forbidden"
+  done
+  case "$job" in
+    core-gates) minutes=60; seconds=3600 ;;
+    omarchy-qml) minutes=10; seconds=600 ;;
+    confined-complete) minutes=5; seconds=300 ;;
+  esac
+  assert_container_contract "$ci_workflow" "$job" \
+    'ductor.invalid/runtime/zadok-ci:v1' "$minutes" "$seconds"
+  actual_container="$(job_block "$ci_workflow" "$job" | awk '
+    /^    container:$/ { container = 1 }
+    container && $0 != "    container:" && /^    [[:alnum:]_-]+:$/ { exit }
+    container { print }
+  ')"
+  expected_container="$(printf '    container:\n      image: ductor.invalid/runtime/zadok-ci:v1\n      env:\n        HOME: /github/home\n        DUCTOR_JOB_TIMEOUT_SECONDS: "%s"' "$seconds")"
+  test "$actual_container" = "$expected_container" \
+    || fail "confined job ${job} must retain only its exact runtime and container environment"
+done
+
+core_strategy="$(job_block "$ci_workflow" core-gates | awk '
+  /^    strategy:$/ { strategy = 1 }
+  strategy && $0 != "    strategy:" && /^    [[:alnum:]_-]+:$/ { exit }
+  strategy { print }
+')"
+test "$core_strategy" = '    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: go-coverage
+            target: ci-coverage
+          - name: full-checks
+            target: ci-full-checks' \
+  || fail 'confined core matrix must retain both complete fixed gates without fail-fast'
+assert_job_contains "$ci_workflow" core-gates "name: \${{ matrix.name }}"
+assert_job_contains "$ci_workflow" omarchy-qml 'name: omarchy-qml'
+assert_job_contains "$ci_workflow" confined-complete 'name: full-hosted'
+assert_job_contains "$ci_workflow" confined-complete 'needs: [core-gates, omarchy-qml]'
+assert_job_contains "$ci_workflow" confined-complete "test \"\$CORE_RESULT\" = success"
+assert_job_contains "$ci_workflow" confined-complete "test \"\$QML_RESULT\" = success"
+for job in core-gates omarchy-qml; do
+  test "$(job_block "$ci_workflow" "$job" | sed -n 's/^        uses: /uses: /p')" = \
+    'uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1' \
+    || fail "confined job ${job} must use only the reviewed checkout action"
+  assert_job_contains "$ci_workflow" "$job" 'persist-credentials: false'
+done
+assert_job_excludes "$ci_workflow" confined-complete 'uses:'
+test "$(job_block "$ci_workflow" core-gates | sed -n 's/^        run: /run: /p')" = \
+  "run: scripts/ci-runtime-check.sh core
+run: bash scripts/ci-core-gate.sh \"\$CI_TARGET\"" \
+  || fail 'confined core must invoke only its checked-out runtime check and fixed core gate'
+test "$(job_block "$ci_workflow" omarchy-qml | sed -n 's/^        run: /run: /p')" = \
+  'run: scripts/ci-runtime-check.sh qml
+run: make omarchy-plugin-check' \
+  || fail 'confined QML must invoke only its checked-out runtime check and gate'
+core_environment="$(job_block "$ci_workflow" core-gates | grep -E '^ +[A-Z][A-Z0-9_]*:')"
+test "$core_environment" = "      GOTOOLCHAIN: local
+      GOMAXPROCS: \"2\"
+      GOFLAGS: -p=2
+        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: \"3600\"
+          CI_TARGET: \${{ matrix.target }}" \
+  || fail 'confined core must preserve its exact Go budget and gate environment'
+barrier_environment="$(job_block "$ci_workflow" confined-complete | grep -E '^ +[A-Z][A-Z0-9_]*:')"
+test "$barrier_environment" = "        HOME: /github/home
+        DUCTOR_JOB_TIMEOUT_SECONDS: \"300\"
+          CORE_RESULT: \${{ needs.core-gates.result }}
+          QML_RESULT: \${{ needs.omarchy-qml.result }}" \
+  || fail 'confined aggregate must bind both actual prerequisite results'
+concurrency_count="$(grep -c '^concurrency:$' "$ci_workflow")"
+test "$concurrency_count" = 1 \
+  || fail 'reusable CI must own one concurrency declaration'
+assert_workflow_contains "$ci_workflow" \
+  "group: ci-\${{ github.repository }}-\${{ github.event_name == 'pull_request' && github.ref || github.run_id }}"
+assert_workflow_contains "$ci_workflow" \
+  "cancel-in-progress: \${{ github.event_name == 'pull_request' }}"
+
 for dockerfile in images/go/Dockerfile images/go-node/Dockerfile; do
   grep --fixed-strings --quiet \
     "ARG GOVULNCHECK_VERSION=${govulncheck_version}" "$dockerfile" \
@@ -224,6 +354,7 @@ route_ci() {
   local same_repository="$4"
   local hosted_pull_requests="$5"
   local default_base="$6"
+  local confined="${7:-false}"
   local execution=rejected
   local target=none
 
@@ -241,11 +372,18 @@ route_ci() {
     && [[ "$event_name" != pull_request \
       || ( "$hosted_pull_requests" == false \
         && "$private_repository" == true \
-        && "$same_repository" == true ) ]]; then
-    execution=persistent-ci
+        && "$same_repository" == true ) ]] \
+    && [[ "$confined" == false || "$private_repository" == true ]]; then
+    if [[ "$confined" == true ]]; then
+      execution='confined-ci'
+    else
+      execution=persistent-ci
+    fi
   fi
 
-  if [[ "$execution" != rejected ]]; then
+  if [[ "$execution" == confined-ci ]]; then
+    target=ci-coverage+ci-full-checks+omarchy-plugin-check
+  elif [[ "$execution" != rejected ]]; then
     if [[ "$event_name" == pull_request ]]; then
       target=ci-fast
     else
@@ -267,6 +405,18 @@ test "$(route_ci schedule refs/heads/main true true true true)" = persistent-ci:
 test "$(route_ci workflow_dispatch refs/heads/main true true true true)" = persistent-ci:ci-full
 test "$(route_ci workflow_dispatch refs/heads/feature true true true true)" = rejected:none
 test "$(route_ci push refs/heads/feature true true true true)" = rejected:none
+
+test "$(route_ci pull_request refs/pull/7/merge true true false true true)" = confined-ci:ci-coverage+ci-full-checks+omarchy-plugin-check
+test "$(route_ci push refs/heads/main true true false true true)" = confined-ci:ci-coverage+ci-full-checks+omarchy-plugin-check
+test "$(route_ci schedule refs/heads/main true true false true true)" = confined-ci:ci-coverage+ci-full-checks+omarchy-plugin-check
+test "$(route_ci workflow_dispatch refs/heads/main true true false true true)" = confined-ci:ci-coverage+ci-full-checks+omarchy-plugin-check
+test "$(route_ci pull_request refs/pull/8/merge false true false true true)" = hosted:ci-fast
+test "$(route_ci pull_request refs/pull/9/merge true false false true true)" = hosted:ci-fast
+test "$(route_ci pull_request refs/pull/10/merge true true true true true)" = hosted:ci-fast
+test "$(route_ci pull_request refs/pull/11/merge true true false false true)" = rejected:none
+test "$(route_ci workflow_dispatch refs/heads/feature true true false true true)" = rejected:none
+test "$(route_ci push refs/heads/main false true false true true)" = rejected:none
+test "$(route_ci pull_request_target refs/heads/main true true false true true)" = rejected:none
 
 vulnerability_workflow=.github/workflows/vulnerability-scan.yml
 assert_workflow_contains "$vulnerability_workflow" \
@@ -301,21 +451,21 @@ assert_job_contains "$publish_workflow" release-gate 'actions: read'
 assert_job_contains "$publish_workflow" release-gate 'contents: read'
 assert_job_contains "$publish_workflow" release-gate 'github.event_name == '\''workflow_dispatch'\'''
 assert_job_contains "$publish_workflow" release-gate "inputs.recovery_release_sha != ''"
-assert_job_contains "$publish_workflow" release-gate 'repos/$GITHUB_REPOSITORY/commits/$DEFAULT_BRANCH'
-assert_job_contains "$publish_workflow" release-gate '[[ "$verification_sha" != "$default_sha" ]]'
-assert_job_contains "$publish_workflow" release-gate 'release_sha: ${{ steps.release_check.outputs.release_sha }}'
-assert_job_contains "$publish_workflow" release-gate 'ref: ${{ steps.resolve.outputs.verification_sha }}'
-assert_job_contains "$publish_workflow" release-gate 'git log --first-parent -1 --format=%H -- "$RELEASE_PLEASE_MANIFEST"'
-assert_job_contains "$publish_workflow" release-gate 'git merge-base --is-ancestor "$release_sha" "$VERIFICATION_SHA"'
+assert_job_contains "$publish_workflow" release-gate "repos/\$GITHUB_REPOSITORY/commits/\$DEFAULT_BRANCH"
+assert_job_contains "$publish_workflow" release-gate "[[ \"\$verification_sha\" != \"\$default_sha\" ]]"
+assert_job_contains "$publish_workflow" release-gate "release_sha: \${{ steps.release_check.outputs.release_sha }}"
+assert_job_contains "$publish_workflow" release-gate "ref: \${{ steps.resolve.outputs.verification_sha }}"
+assert_job_contains "$publish_workflow" release-gate "git log --first-parent -1 --format=%H -- \"\$RELEASE_PLEASE_MANIFEST\""
+assert_job_contains "$publish_workflow" release-gate "git merge-base --is-ancestor \"\$release_sha\" \"\$VERIFICATION_SHA\""
 assert_job_contains "$publish_workflow" release-gate 'release_manifest_version'
-assert_job_contains "$publish_workflow" release-gate 'deadline=$((SECONDS + 1800))'
+assert_job_contains "$publish_workflow" release-gate "deadline=\$((SECONDS + 1800))"
 assert_job_contains "$publish_workflow" release-gate 'actions/workflows/ci.yml/runs'
 assert_job_contains "$publish_workflow" release-gate 'select(.path == ".github/workflows/ci.yml")'
 assert_job_contains "$publish_workflow" release-gate 'select(.event == "push")'
-assert_job_contains "$publish_workflow" release-gate 'select(.head_sha == $sha)'
-assert_job_contains "$publish_workflow" release-gate 'select(.head_branch == $branch)'
+assert_job_contains "$publish_workflow" release-gate "select(.head_sha == \$sha)"
+assert_job_contains "$publish_workflow" release-gate "select(.head_branch == \$branch)"
 assert_job_contains "$publish_workflow" release-gate 'completed)'
-assert_job_contains "$publish_workflow" release-gate '[[ "$conclusion" == success ]]'
+assert_job_contains "$publish_workflow" release-gate "[[ \"\$conclusion\" == success ]]"
 assert_job_excludes "$publish_workflow" release-gate 'contents: write'
 assert_job_excludes "$publish_workflow" release-gate 'runs-on: ubuntu-latest'
 assert_job_excludes "$publish_workflow" release-gate 'make ci-'
@@ -329,9 +479,9 @@ assert_job_contains "$publish_workflow" release-please \
 assert_container_contract "$publish_workflow" release-please \
   'ductor.invalid/runtime/go-release:v1' 10 600
 assert_job_contains "$publish_workflow" release-please \
-  'repos/$GITHUB_REPOSITORY/releases/tags/$EXPECTED_TAG_NAME'
+  "repos/\$GITHUB_REPOSITORY/releases/tags/\$EXPECTED_TAG_NAME"
 assert_job_contains "$publish_workflow" release-please \
-  '[[ "$tag_commit" != "$RELEASE_SHA" ]]'
+  "[[ \"\$tag_commit\" != \"\$RELEASE_SHA\" ]]"
 
 assert_job_contains "$publish_workflow" goreleaser 'runs-on: ductor-release'
 assert_container_contract "$publish_workflow" goreleaser \
@@ -360,15 +510,15 @@ assert_job_contains "$publish_workflow" reconcile-release-please \
 assert_job_contains "$publish_workflow" reconcile-release-please \
   'pull-requests: write'
 assert_job_contains "$publish_workflow" reconcile-release-please \
-  'repos/$GITHUB_REPOSITORY/commits/$RELEASE_SHA/pulls'
+  "repos/\$GITHUB_REPOSITORY/commits/\$RELEASE_SHA/pulls"
 assert_job_contains "$publish_workflow" reconcile-release-please \
-  '.merge_commit_sha == $sha'
+  ".merge_commit_sha == \$sha"
 assert_job_contains "$publish_workflow" reconcile-release-please \
   'autorelease: pending'
 assert_job_contains "$publish_workflow" reconcile-release-please \
   'autorelease: tagged'
 assert_job_contains "$publish_workflow" reconcile-release-please \
-  'repos/$GITHUB_REPOSITORY/pulls/$release_pr_number'
+  "repos/\$GITHUB_REPOSITORY/pulls/\$release_pr_number"
 assert_job_excludes "$publish_workflow" reconcile-release-please \
   'contents: write'
 
@@ -552,9 +702,9 @@ assert_job_contains "$smoke_workflow" node-runner \
   'for executable in node npm vp git make; do'
 assert_job_contains "$smoke_workflow" node-runner \
   'for executable in goreleaser syft cosign golangci-lint govulncheck; do'
-assert_job_contains "$smoke_workflow" node-runner '[[ -z "${DOCKER_HOST:-}" ]]'
+assert_job_contains "$smoke_workflow" node-runner "[[ -z \"\${DOCKER_HOST:-}\" ]]"
 assert_job_contains "$smoke_workflow" ci-runner 'shell: bash'
-assert_job_contains "$smoke_workflow" ci-runner 'socket_path="${DOCKER_HOST#unix://}"'
+assert_job_contains "$smoke_workflow" ci-runner "socket_path=\"\${DOCKER_HOST#unix://}\""
 assert_job_contains "$smoke_workflow" ci-runner 'for executable in goreleaser syft cosign; do'
 assert_job_contains "$smoke_workflow" release-runner 'shell: bash'
 assert_job_contains "$smoke_workflow" release-runner \
@@ -578,7 +728,7 @@ if grep --extended-regexp --quiet \
   fail 'container smoke must not expose the removed profile contract'
 fi
 assert_job_contains "$container_smoke_workflow" slot \
-  'ductor image status --pool "$EXPECTED_POOL"'
+  "ductor image status --pool \"\$EXPECTED_POOL\""
 assert_container_contract "$container_smoke_workflow" slot \
   "\${{ format('ductor.invalid/runtime/{0}:v1', inputs.runtime) }}" 5 300
 assert_workflow_contains "$container_smoke_workflow" \
