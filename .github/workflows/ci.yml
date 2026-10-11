@@ -47,7 +47,7 @@ concurrency:
 
 jobs:
   full-hosted:
-    name: ${{ inputs.confined && 'hosted-unselected' || 'full-hosted' }}
+    name: full-hosted
     if: ${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -202,7 +202,7 @@ jobs:
         run: make omarchy-plugin-check
 
   confined-complete:
-    name: full-hosted
+    name: full-confined
     if: ${{ always() && inputs.confined && github.event.repository.private && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || (github.event.pull_request.base.ref == github.event.repository.default_branch && !inputs.hosted-pull-requests && github.event.pull_request.head.repo.full_name == github.repository)) }}
     needs: [core-gates, omarchy-qml]
     runs-on: ductor-ci

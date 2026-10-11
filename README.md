@@ -25,12 +25,14 @@ Callers choose behavior and capability, never tool versions or image identities.
 
 `confined: true` selects the complete confined gates for a private caller:
 `ci-coverage` and `ci-full-checks` run as two fixed core lanes, alongside the
-QML check and an aggregate `full-hosted` check. All four jobs use the reviewed
+QML check and an aggregate `full-confined` check. All four jobs use the reviewed
 `zadok-ci` runtime; the core, QML and aggregate deadlines are respectively
 60, 10 and 5 minutes. The caller owns the runtime-check and core-gate scripts
 in its checkout. The core script preserves its gate exit and emits its coverage
 evidence before cleanup; no coverage upload action or secret is passed to
 these four jobs.
+The generic hosted job keeps the static `full-hosted` name, including when
+it is skipped; the confined aggregate has its distinct static name.
 
 Confined jobs accept the same repository's private pull requests targeting the
 default branch, or default-branch push, schedule and manual dispatch events.

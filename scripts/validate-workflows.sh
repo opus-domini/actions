@@ -236,8 +236,8 @@ test "$ci_jobs" = '  full-hosted:
 hosted_condition="if: \${{ github.event_name == 'pull_request' && (inputs.hosted-pull-requests || !github.event.repository.private || github.event.pull_request.head.repo.full_name != github.repository) }}"
 test "$(job_block "$ci_workflow" full-hosted | sed -n 's/^    if: /if: /p')" = "$hosted_condition" \
   || fail 'hosted pull request routing must remain unchanged'
-assert_job_contains "$ci_workflow" full-hosted \
-  "name: \${{ inputs.confined && 'hosted-unselected' || 'full-hosted' }}"
+test "$(job_block "$ci_workflow" full-hosted | sed -n 's/^    name: /name: /p')" = 'name: full-hosted' \
+  || fail 'hosted CI must retain the exact static full-hosted name'
 trusted_condition="if: \${{ !inputs.confined && (github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && (github.event_name != 'pull_request' || github.event.pull_request.base.ref == github.event.repository.default_branch) && (github.event_name != 'pull_request' || (!inputs.hosted-pull-requests && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository)) }}"
 test "$(job_block "$ci_workflow" full-trusted | sed -n 's/^    if: /if: /p')" = "$trusted_condition" \
   || fail 'generic trusted routing must exclude confined selection only'
@@ -288,7 +288,8 @@ test "$core_strategy" = '    strategy:
   || fail 'confined core matrix must retain both complete fixed gates without fail-fast'
 assert_job_contains "$ci_workflow" core-gates "name: \${{ matrix.name }}"
 assert_job_contains "$ci_workflow" omarchy-qml 'name: omarchy-qml'
-assert_job_contains "$ci_workflow" confined-complete 'name: full-hosted'
+test "$(job_block "$ci_workflow" confined-complete | sed -n 's/^    name: /name: /p')" = 'name: full-confined' \
+  || fail 'confined aggregate must retain the exact static full-confined name'
 assert_job_contains "$ci_workflow" confined-complete 'needs: [core-gates, omarchy-qml]'
 assert_job_contains "$ci_workflow" confined-complete "test \"\$CORE_RESULT\" = success"
 assert_job_contains "$ci_workflow" confined-complete "test \"\$QML_RESULT\" = success"

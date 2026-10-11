@@ -93,6 +93,12 @@ assert_rejected generic-trusted-confined-overlap .github/workflows/ci.yml \
 assert_rejected hosted-pull-request-routing .github/workflows/ci.yml \
   "/^  full-hosted:\$/,/^  full-trusted:\$/s/if: .*\$/if: \${{ !inputs.confined }}/" \
   'hosted pull request routing must remain unchanged'
+assert_rejected hosted-dynamic-name .github/workflows/ci.yml \
+  "/^  full-hosted:\$/,/^  full-trusted:\$/s/^    name: full-hosted\$/    name: \${{ inputs.confined \&\& 'hosted-unselected' || 'full-hosted' }}/" \
+  'hosted CI must retain the exact static full-hosted name'
+assert_rejected confined-aggregate-name-overlap .github/workflows/ci.yml \
+  "/^  confined-complete:\$/,\$s/^    name: full-confined\$/    name: full-hosted/" \
+  'confined aggregate must retain the exact static full-confined name'
 assert_rejected confined-runtime .github/workflows/ci.yml \
   's|ductor.invalid/runtime/zadok-ci:v1|ductor.invalid/runtime/go-node:v1|' \
   'job core-gates must contain: image: ductor.invalid/runtime/zadok-ci:v1'
