@@ -21,6 +21,10 @@ Workflow validation checks every Dockerfile image and tool argument against
 that ledger, along with Bake defaults and hosted CI tool versions. Run
 `scripts/validate-workflows.sh` and `bash scripts/test-validate-workflows.sh`
 after updating pins; build and exercise changed images before publication.
+The `govulncheck` build stages in `go` and `go-node` explicitly set
+`GOMAXPROCS=2 GOFLAGS=-p=2` to bound Go execution and package compilation
+concurrency. These settings apply to that build stage only; the final runtime
+environment is unchanged.
 `docker-bake.hcl` is the canonical local build entry point:
 
 ```bash

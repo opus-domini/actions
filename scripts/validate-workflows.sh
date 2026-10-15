@@ -334,6 +334,29 @@ for dockerfile in images/go/Dockerfile images/go-node/Dockerfile; do
   grep --fixed-strings --quiet \
     "ARG GOVULNCHECK_VERSION=${govulncheck_version}" "$dockerfile" \
     || fail "${dockerfile} must use the reviewed govulncheck version"
+  awk '
+    /^FROM / {
+      stage = ($0 == "FROM ${GO_IMAGE} AS govulncheck")
+      if (stage) stages++
+    }
+    stage && /^ENV / {
+      environments++
+      if ($0 != "ENV GOMAXPROCS=2 GOFLAGS=-p=2" || runs) invalid = 1
+    }
+    stage && /(GOMAXPROCS|GOFLAGS)/ {
+      if ($0 != "ENV GOMAXPROCS=2 GOFLAGS=-p=2") invalid = 1
+    }
+    stage && /^RUN / {
+      runs++
+      if (environments != 1) invalid = 1
+    }
+    stage && /go install/ {
+      installs++
+      if ($0 != "    GOBIN=/out CGO_ENABLED=0 go install \\") invalid = 1
+    }
+    END { exit (stages != 1 || environments != 1 || runs != 1 || installs != 1 || invalid) }
+  ' "$dockerfile" \
+    || fail "${dockerfile} must bound the govulncheck build stage with GOMAXPROCS=2 GOFLAGS=-p=2 before go install"
 done
 grep --fixed-strings --quiet \
   "default = \"${govulncheck_version}\"" images/docker-bake.hcl \
