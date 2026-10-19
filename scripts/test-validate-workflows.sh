@@ -47,6 +47,9 @@ assert_rejected unpinned-node-ci-image images/node/Dockerfile \
 assert_rejected divergent-node-ci-vite-plus images/node/Dockerfile \
   's/^ARG VITE_PLUS_VERSION=.*/ARG VITE_PLUS_VERSION=0.0.0/' \
   'argument VITE_PLUS_VERSION must match images/versions.env'
+assert_rejected divergent-node-ci-npm images/node/Dockerfile \
+  's/^ARG NPM_CI_VERSION=.*/ARG NPM_CI_VERSION=0.0.0/' \
+  'argument NPM_CI_VERSION must match images/versions.env'
 assert_rejected missing-node-runtime-marker .github/workflows/runner-smoke.yml \
   's|ductor.invalid/runtime/node:v1|ductor.invalid/runtime/node:v2|' \
   'job node-runner must contain: image: ductor.invalid/runtime/node:v1'
