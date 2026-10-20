@@ -32,6 +32,14 @@ assert_rejected() {
   printf 'rejected %s\n' "$name"
 }
 
+# Each Go runtime must use the same reviewed compiler image, including the
+# weekly vulnerability scan's generic Go runtime.
+for runtime in go go-node go-release; do
+  assert_rejected "stale-go-image-${runtime}" "images/${runtime}/Dockerfile" \
+    's|^ARG GO_IMAGE=.*|ARG GO_IMAGE=golang:1.27.1-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b|' \
+    'argument GO_IMAGE must match images/versions.env'
+done
+
 assert_rejected unpinned-secondary-image images/go-node/Dockerfile \
   's/^(ARG NODE_IMAGE=.*)@sha256:[0-9a-f]+$/\1/' \
   'argument NODE_IMAGE must pin its image by digest'
