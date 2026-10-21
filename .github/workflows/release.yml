@@ -38,12 +38,12 @@ jobs:
            github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
            inputs.recovery_release_sha != '') }}
     runs-on: ductor-release
-    timeout-minutes: 35
+    timeout-minutes: 155
     container:
       image: ductor.invalid/runtime/go-release:v1
       env:
         HOME: /github/home
-        DUCTOR_JOB_TIMEOUT_SECONDS: "2100"
+        DUCTOR_JOB_TIMEOUT_SECONDS: "9300"
     permissions:
       actions: read
       contents: read
@@ -188,7 +188,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          deadline=$((SECONDS + 1800))
+          deadline=$((SECONDS + 9000))
           while (( SECONDS < deadline )); do
             response="$(gh api \
               --method GET \
@@ -239,7 +239,7 @@ jobs:
             sleep 15
           done
 
-          echo "::error title=Release CI timeout::No completed successful push CI for ${RELEASE_SHA} was found within 30 minutes."
+          echo "::error title=Release CI timeout::No completed successful push CI for ${RELEASE_SHA} was found within 150 minutes."
           exit 1
 
   release-please:

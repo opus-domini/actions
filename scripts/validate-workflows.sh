@@ -470,7 +470,7 @@ publish_workflow=.github/workflows/release.yml
 assert_workflow_contains "$publish_workflow" 'recovery_release_sha:'
 assert_job_contains "$publish_workflow" release-gate 'runs-on: ductor-release'
 assert_container_contract "$publish_workflow" release-gate \
-  'ductor.invalid/runtime/go-release:v1' 35 2100
+  'ductor.invalid/runtime/go-release:v1' 155 9300
 assert_job_contains "$publish_workflow" release-gate 'actions: read'
 assert_job_contains "$publish_workflow" release-gate 'contents: read'
 assert_job_contains "$publish_workflow" release-gate 'github.event_name == '\''workflow_dispatch'\'''
@@ -482,7 +482,8 @@ assert_job_contains "$publish_workflow" release-gate "ref: \${{ steps.resolve.ou
 assert_job_contains "$publish_workflow" release-gate "git log --first-parent -1 --format=%H -- \"\$RELEASE_PLEASE_MANIFEST\""
 assert_job_contains "$publish_workflow" release-gate "git merge-base --is-ancestor \"\$release_sha\" \"\$VERIFICATION_SHA\""
 assert_job_contains "$publish_workflow" release-gate 'release_manifest_version'
-assert_job_contains "$publish_workflow" release-gate "deadline=\$((SECONDS + 1800))"
+assert_job_contains "$publish_workflow" release-gate "deadline=\$((SECONDS + 9000))"
+assert_job_contains "$publish_workflow" release-gate 'was found within 150 minutes.'
 assert_job_contains "$publish_workflow" release-gate 'actions/workflows/ci.yml/runs'
 assert_job_contains "$publish_workflow" release-gate 'select(.path == ".github/workflows/ci.yml")'
 assert_job_contains "$publish_workflow" release-gate 'select(.event == "push")'

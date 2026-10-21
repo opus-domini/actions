@@ -53,8 +53,12 @@ recovery input for the exact current default-branch commit. Recovery derives the
 canonical release target from the first-parent commit that last changed the
 current manifest version and requires it to be an ancestor of that current head.
 Before any release mutation, a read-only verifier on the dedicated release pool
-checks the target and waits up to 30 minutes for its exact reusable CI push run to finish
-successfully. A stale recovery request or a missing, failed, cancelled,
+checks the target and waits up to 150 minutes for its exact reusable CI push run
+to finish successfully, including scheduling delays. The verifier occupies a
+release runner while waiting. Its job and container deadline is 155 minutes
+(9,300 seconds), leaving five minutes outside the polling loop for checkout and
+verification. The wait is finite: scheduling beyond this allowance still blocks
+publication. A stale recovery request or a missing, failed, cancelled,
 mismatched, or timed-out CI run blocks publication.
 
 The publication job executes `goreleaser release --clean` exactly once inside
