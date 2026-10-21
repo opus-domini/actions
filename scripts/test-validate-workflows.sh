@@ -181,3 +181,16 @@ assert_rejected confined-extra-job .github/workflows/ci.yml \
 assert_rejected confined-concurrency-removal .github/workflows/ci.yml \
   's/^  group: ci-/  group: other-/' \
   'must contain: group: ci-'
+
+assert_rejected release-ci-wait-budget .github/workflows/release.yml \
+  's/SECONDS \+ 9000/SECONDS + 8999/' \
+  'job release-gate must contain: deadline=$((SECONDS + 9000))'
+assert_rejected release-ci-wait-job-deadline .github/workflows/release.yml \
+  '/^  release-gate:$/,/^  release-please:$/s/timeout-minutes: 155/timeout-minutes: 154/' \
+  'job release-gate must contain: timeout-minutes: 155'
+assert_rejected release-ci-wait-runtime-deadline .github/workflows/release.yml \
+  's/DUCTOR_JOB_TIMEOUT_SECONDS: "9300"/DUCTOR_JOB_TIMEOUT_SECONDS: "9299"/' \
+  'job release-gate must contain: DUCTOR_JOB_TIMEOUT_SECONDS: "9300"'
+assert_rejected release-ci-wait-timeout-message .github/workflows/release.yml \
+  's/within 150 minutes[.]/within 30 minutes./' \
+  'job release-gate must contain: was found within 150 minutes.'
