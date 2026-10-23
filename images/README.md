@@ -25,7 +25,7 @@ The `go`, `go-node` and `go-release` runtimes share the pinned Go 1.27.3
 compiler image. Verify `GOTOOLCHAIN=local go env GOVERSION` is `go1.27.3`
 in each built image before capture; a workflow pin alone does not replace a
 captured runtime image.
-The `node` runtime pins npm 12.2.0 and Vite+ 1.3.0 on Node 26.10.0;
+The `node` runtime pins npm 12.2.1 and Vite+ 1.4.0 on Node 26.10.0;
 the other runtimes retain their separate Node and npm pins. Exercise all three
 version commands (`node --version`, `npm --version` and `vp --version`) in the
 built image before capturing it for Ductor.
