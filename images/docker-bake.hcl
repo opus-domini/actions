@@ -23,11 +23,11 @@ variable "NPM_VERSION" {
 }
 
 variable "NPM_CI_VERSION" {
-  default = "12.2.0"
+  default = "12.2.1"
 }
 
 variable "VITE_PLUS_VERSION" {
-  default = "1.3.0"
+  default = "1.4.0"
 }
 
 variable "GOVULNCHECK_VERSION" {
