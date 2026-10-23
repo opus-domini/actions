@@ -25,10 +25,14 @@ The `go`, `go-node` and `go-release` runtimes share the pinned Go 1.27.3
 compiler image. Verify `GOTOOLCHAIN=local go env GOVERSION` is `go1.27.3`
 in each built image before capture; a workflow pin alone does not replace a
 captured runtime image.
-The `node` runtime pins npm 12.2.1 and Vite+ 1.4.0 on Node 26.10.0;
-the other runtimes retain their separate Node and npm pins. Exercise all three
-version commands (`node --version`, `npm --version` and `vp --version`) in the
-built image before capturing it for Ductor.
+The `node` runtime pins Node 26.10.0, the version its callers build on, and
+ships npm 12.2.1 and Vite+ 1.4.0 only to start an install: `vp install` fetches
+the exact npm of the caller's `packageManager`, refusing a tarball that differs
+from the sha512 that field carries, and the caller's scripts run the `vite-plus`
+of its lockfile. A caller therefore moves npm and Vite+ without a new image; only
+a Node bump needs one. The other runtimes retain their separate Node and npm
+pins. Exercise all three version commands (`node --version`, `npm --version` and
+`vp --version`) in the built image before capturing it for Ductor.
 The `govulncheck` build stages in `go` and `go-node` explicitly set
 `GOMAXPROCS=2 GOFLAGS=-p=2` to bound Go execution and package compilation
 concurrency. These settings apply to that build stage only; the final runtime
