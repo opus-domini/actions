@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1.12
 
-ARG GO_IMAGE=golang:1.27.3-bookworm@sha256:5c3e9b43cfd3bb95c7937462e29d87ada57b481a96fa23ad0eb61778d7a00110
+ARG GO_IMAGE=golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea
 ARG NODE_IMAGE=node:26.8.1-bookworm-slim@sha256:367679cf9792759492a486e4aa4b421764d71a9546a6dae8aab81a99eb797b3e
-ARG GOLANGCI_LINT_IMAGE=golangci/golangci-lint:v2.13.2@sha256:ba07dffad130794ae79ebaa0056809d18c0168f3f846480ffd3eb6c04578b83d
+ARG GOLANGCI_LINT_IMAGE=golangci/golangci-lint:v2.15.0@sha256:fbfcfd12a6f8d7f1b97b3362ca80fc2a244d46863148c73cb88e7793af96c481
 ARG DOCKER_CLI_IMAGE=docker:29.8.0-cli@sha256:eccaacfeed644c7de222ff047483568cb988dde95476fbaaf10ea2d04921bb66
 
 FROM ${NODE_IMAGE} AS node
@@ -15,7 +15,7 @@ FROM ${GOLANGCI_LINT_IMAGE} AS golangci
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli
 
 FROM ${GO_IMAGE} AS govulncheck
-ARG GOVULNCHECK_VERSION=1.8.0
+ARG GOVULNCHECK_VERSION=1.10.0
 ENV GOMAXPROCS=2 GOFLAGS=-p=2
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     GOBIN=/out CGO_ENABLED=0 go install \

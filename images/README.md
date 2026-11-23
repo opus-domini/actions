@@ -21,8 +21,8 @@ Workflow validation checks every Dockerfile image and tool argument against
 that ledger, along with Bake defaults and hosted CI tool versions. Run
 `scripts/validate-workflows.sh` and `bash scripts/test-validate-workflows.sh`
 after updating pins; build and exercise changed images before publication.
-The `go`, `go-node` and `go-release` runtimes share the pinned Go 1.27.3
-compiler image. Verify `GOTOOLCHAIN=local go env GOVERSION` is `go1.27.3`
+The `go`, `go-node` and `go-release` runtimes share the pinned Go 1.27.4
+compiler image. Verify `GOTOOLCHAIN=local go env GOVERSION` is `go1.27.4`
 in each built image before capture; a workflow pin alone does not replace a
 captured runtime image.
 The `node` runtime pins Node 26.10.0, the version its callers build on, and

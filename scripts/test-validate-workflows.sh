@@ -36,7 +36,7 @@ assert_rejected() {
 # weekly vulnerability scan's generic Go runtime.
 for runtime in go go-node go-release; do
   assert_rejected "stale-go-image-${runtime}" "images/${runtime}/Dockerfile" \
-    's|^ARG GO_IMAGE=.*|ARG GO_IMAGE=golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61|' \
+    's|^ARG GO_IMAGE=.*|ARG GO_IMAGE=golang:1.27.3-bookworm@sha256:5c3e9b43cfd3bb95c7937462e29d87ada57b481a96fa23ad0eb61778d7a00110|' \
     'argument GO_IMAGE must match images/versions.env'
 done
 

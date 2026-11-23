@@ -31,7 +31,7 @@ variable "VITE_PLUS_VERSION" {
 }
 
 variable "GOVULNCHECK_VERSION" {
-  default = "1.8.0"
+  default = "1.10.0"
 }
 
 variable "GH_VERSION" {
@@ -47,7 +47,7 @@ variable "LIBONIG_VERSION" {
 }
 
 variable "GO_IMAGE" {
-  default = "golang:1.27.3-bookworm@sha256:5c3e9b43cfd3bb95c7937462e29d87ada57b481a96fa23ad0eb61778d7a00110"
+  default = "golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea"
 }
 
 variable "NODE_IMAGE" {
@@ -59,7 +59,7 @@ variable "NODE_CI_IMAGE" {
 }
 
 variable "GOLANGCI_LINT_IMAGE" {
-  default = "golangci/golangci-lint:v2.13.2@sha256:ba07dffad130794ae79ebaa0056809d18c0168f3f846480ffd3eb6c04578b83d"
+  default = "golangci/golangci-lint:v2.15.0@sha256:fbfcfd12a6f8d7f1b97b3362ca80fc2a244d46863148c73cb88e7793af96c481"
 }
 
 variable "DOCKER_CLI_IMAGE" {
